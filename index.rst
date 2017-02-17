@@ -49,3 +49,17 @@
    **This technote is not yet published.**
 
    This note describes jointcal’s algorithm, fitting process, and currently available models.
+
+Other simlar work
+=================
+
+ubercal (from SDSS)
+-------------------
+
+ubercal (from Pan-Starrs)
+-------------------------
+
+meas_mosaic (from HSC)
+----------------------
+
+meas_mosaic fits
