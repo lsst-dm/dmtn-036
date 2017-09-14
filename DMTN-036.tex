@@ -1,13 +1,7 @@
 %% LyX 2.2.3 created this file.  For more info, see http://www.lyx.org/.
 %% Do not edit unless you really know what you are doing.
 \documentclass[DM,lsstdraft,toc,authoryear]{lsstdoc}
-\ifx\hypersetup\undefined
-  \AtBeginDocument{%
-    \hypersetup{unicode=true}
-  }
-\else
-  \hypersetup{unicode=true}
-\fi
+\usepackage{prettyref}
 
 \makeatletter
 
@@ -18,7 +12,7 @@ Exposures with Large CCD Mosaics}
 \author{John Parejko (University of Washington), Pierre Astier (LPNHE/IN2P3/CNRS
 Paris)}
 \setDocRef{DMTN-036}
-\date{\today}
+\date{2017-09-18}
 \setDocAbstract{The jointcal package simultaneously optimizes the astrometric and
 photometric calibrations of a set of astronomical images. In principle
 and often in practice, this approach produces distortion and thoroughput
@@ -31,17 +25,12 @@ Jointcal is built on top of the the LSST Data Management software
 stack.}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%% User specified LaTeX commands.
-\newcommand{\ClName}[1]{{\bf #1}}
-\newcommand{\RoutineName}[1]{\texttt{#1}}
-%\def\arcsec{\hbox{$^{\prime\prime}$}}
-%\providecommand{\eprint}[1]{\href{http://arxiv.org/abs/#1}{#1}}
-
 % Change history defined here.
 % Order: oldest first.
 % Fields: VERSION, DATE, DESCRIPTION, OWNER NAME.
 % See LPM-51 for version number policy.
 \setDocChangeRecord{%
-  \addtohist{1}{2017-09-01}{Unreleased.}{John Parejko}
+  \addtohist{1}{2017-09-18}{Initial release. Moved from jointcal repo.}{John Parejko}
 }
 
 \makeatother
@@ -49,7 +38,6 @@ stack.}
 \usepackage{xunicode}
 \begin{document}
 \maketitle
-\tableofcontents{}
 
 \section{Introduction}
 
@@ -73,23 +61,23 @@ clear that one cannot fit simultaneously the position on the sky and
 the mappings from CCD coordinates to the sky, without extra constraints:
 the ``sky'' coordinate system is then undefined, and one needs reference
 positions in order to fully define this frame. We use the GAIA catalog
-as our reference catalog, and may supplement it with deeper data (e.g.
-PS1) where available.
+\citep{2016A&A...595A...2G} as our reference catalog, and may supplement
+it with deeper data (e.g. PS1) where available.
 
-SCAMP \footnote{See \href{http://www.astromatic.net/software/scamp}{http://www.astromatic.net/software/scamp}}is
-the reference package for simultaneous astrometry in astronomy, at
-least for relative alignment of wide-field images prior to stacking.
-Regarding optimization, SCAMP follows a somewhat different route from
-ours: it does not optimize over the position of common objects but
-rather minimizes the distance between pairs of transformed measurements
-of the same object. This approach is not a maximum likelihood optimization,
-and is likely statistically sub-optimal. The main drawback of SCAMP
-in the context of LSST is the fact that it is a program and not a
-library, and hence not flexible regarding formats of images and catalogs.
-But since SCAMP has been used for almost a decade in production by
-various teams, the quality checking tools it provides should likely
-be reproduced in the context of our package. We provide residual ntuples
-and hope that the first serious users will contribute plotting tools.
+SCAMP \citep{2006ASPC..351..112B} is the reference package for simultaneous
+astrometry in astronomy, at least for relative alignment of wide-field
+images prior to stacking. Regarding optimization, SCAMP follows a
+somewhat different route from ours: it does not optimize over the
+position of common objects but rather minimizes the distance between
+pairs of transformed measurements of the same object. This approach
+is not a maximum likelihood optimization, and is likely statistically
+sub-optimal. The main drawback of SCAMP in the context of LSST is
+the fact that it is a program and not a library, and hence not flexible
+regarding formats of images and catalogs. But since SCAMP has been
+used for almost a decade in production by various teams, the quality
+checking tools it provides should likely be reproduced in the context
+of our package. We provide residual ntuples and hope that the first
+serious users will contribute plotting tools.
 
 Loading input catalogs and their metadata from disk is a large fraction
 of the total time. We can save time by re-using the input catalog
@@ -97,11 +85,11 @@ to fit a similar style of multi-component model for the relative and
 absolute photometry.
 
 The plan of this note is as follows: we first sketch the algorithm
-(\S\ref{sec:algo}). We provide our least-squares formulation in
-\S\ref{sec:mathematical-formalism}, and describe the how we evaluate
-the derivatives with respect to the parameters. We then describe how
-we associate the measurements of each object in different exposures
-in \S \ref{sec:catalog-association}. 
+(\prettyref{sec:algo}). We provide our least-squares formulation
+in \prettyref{sec:mathematical-formalism}, and describe the how we
+evaluate the derivatives with respect to the parameters. We then describe
+how we associate the measurements of each object in different exposures
+in \prettyref{sec:catalog-association}. 
 
 \section{Past work}
 
@@ -117,7 +105,7 @@ A summary of past work on this topic will go here eventually...
 
 The algorithm assumes that the initial single-frame WCS fits of the
 input images are accurate to $\sim1\arcsec$. Currently, the code
-properly interprets the SIP WCS's (relying on \ClName{lsst::afw::wcs}),
+properly interprets the SIP WCS's (relying on \code{lsst::afw::wcs}),
 with or without distortions. The code might handle transparently the
 ``PV'' encoding of distortions (used in SCAMP and Swarp), but lacks
 the IO's required to use this format. Note that in both instances,
@@ -151,21 +139,21 @@ clipping outliers at each iteration.
 \end{figure*}
 
 We use the following notation in the mathematics that follows, with
-\ClName{CamelCased} words referring to the objects in the code..
-These terms are diagramed in Fig. \ref{fig:NotationDigram}.
+\class{CamelCased} words referring to the objects in the code. These
+terms are diagramed in \prettyref{fig:NotationDigram}.
 \begin{itemize}
-\item $\gamma$ is the \ClName{CcdImage} representing one exposure (\emph{visit}
-in LSST terminology) on one CCD. The \ClName{CcdImage} contains metadata
+\item $\gamma$ is the \class{CcdImage} representing one exposure (\emph{visit}
+in LSST terminology) on one CCD. The \class{CcdImage} contains metadata
 about that visit and CCD detector, as well as the catalog of sources
 that were selected for use in the fit;
 \item $S_{\gamma,i}$ is the position (pixels) and flux (instrument-flux
-counts) ($x_{\gamma i},y_{\gamma i},f_{\gamma i}$) of the \ClName{MeasuredStar}
-on \ClName{CcdImage} $\gamma$ corresponding to the on-sky \ClName{FittedStar}
+counts) ($x_{\gamma i},y_{\gamma i},f_{\gamma i}$) of the \class{MeasuredStar}
+on \class{CcdImage} $\gamma$ corresponding to the on-sky \class{FittedStar}
 $i$;
 \item $F_{i}$ is the (sky) position and calibrated-flux $(\alpha_{i},\beta_{i},\phi_{i})$
 of the star $i$, with some corresponding number of measurements represented
-by \ClName{MeasuredStar}s;
-\item $M_{\gamma}$ is the mapping for \ClName{CcdImage} $\gamma$ from
+by \class{MeasuredStar}s;
+\item $M_{\gamma}$ is the mapping for \class{CcdImage} $\gamma$ from
 pixels/instrument-flux $(x,y,f)$ to the tangent plane on the sky/calibrated-flux
 $(\alpha,\beta,\phi)$. This mapping may consist of models constrained
 across visits (different between CCDs; e.g. an affine model for each
@@ -174,7 +162,7 @@ and visits (e.g. a 2d radial polynomial of the optics) or constrained
 across CCDs (different between visits; e.g. a 2d polynomial of the
 sky);
 \item $R_{j}$ refers to the (sky) position and (reference) calibrated-flux
-$(\alpha_{j},\beta_{j},\phi_{j})$ of \ClName{RefStar} $j$.
+$(\alpha_{j},\beta_{j},\phi_{j})$ of \class{RefStar} $j$.
 \end{itemize}
 In addition to the terms defined in the diagram above, we define the
 following terms for the measurement component,
@@ -206,13 +194,12 @@ to the tangent plane $P$:
 \chi^{2} & =\sum_{\gamma,i}[M_{\gamma}(S_{\gamma,i})-P_{\gamma}(F_{i})]^{T}W_{\gamma,i}[M_{\gamma}(S_{\gamma,i})-P_{\gamma}(F_{i})] & \textrm{(meas. terms)}\nonumber \\
  & +\sum_{j}[P(F_{j})-P(R_{j})]^{T}W_{j}[P(F_{j})-P(R_{j})] & \textrm{(ref. terms)}\label{eq:astrometry-chi2}
 \end{align}
-where the first line iterates on all \ClName{MeasuredStar} $\gamma,i$,
-from all \ClName{CcdImage} $\gamma$, and the second iterates on
-all \ClName{RefStar} $j$. In the first terms, the object at position
+where the first line iterates on all \class{MeasuredStar} $\gamma,i$,
+from all \class{CcdImage} $\gamma$, and the second iterates on all
+\class{RefStar} $j$. In the first terms, the object at position
 $F_{i}$ is the one that was measured at position $S_{\gamma,i}$
-in image $\gamma$. The association between \ClName{MeasuredStar}s,
-\ClName{FittedStar}s, and \ClName{RefStar}s is described in Section
-\ref{sec:catalog-association}.
+in image $\gamma$. The association between \class{MeasuredStar}s,
+\class{FittedStar}s, and \class{RefStar}s is described in \prettyref{sec:catalog-association}.
 
 The measurement terms compare the measurement positions/fluxes to
 objects positions/fluxes (the relative astrometry/photometry), the
@@ -234,7 +221,7 @@ exploit this feature to rapidly compute the gradient and the Hessian
 of the $\chi^{2}$ in order to find the minimum.
 
 So far, we have not specified how we model the mappings $M$ nor how
-we choose the various projectors that appear in expression \ref{eq:astrometry-chi2}.
+we choose the various projectors that appear in expression \prettyref{eq:astrometry-chi2}.
 The code has been written to allow the user to provide their own versions
 of both the model for mappings and the projection scheme. We however
 provide some implementations for both aspects that we discuss in the
@@ -242,9 +229,9 @@ next two sections.
 
 \subsection{Minimization approach}
 
-The expressions for astrometry (eq. \ref{eq:astrometry-chi2}) and
-photometry (eq. \ref{eq:photometry-chi2}) depend on two sets of parameters:
-the parameters $\eta$ defining the mappings $M_{\gamma}(S_{\gamma,i})\equiv M_{\gamma}(\eta_{\gamma},S_{\gamma,i})$,
+The expressions for astrometry (eq. \prettyref{eq:astrometry-chi2})
+and photometry (eq. \prettyref{eq:photometry-chi2}) depend on two
+sets of parameters: the parameters $\eta$ defining the mappings $M_{\gamma}(S_{\gamma,i})\equiv M_{\gamma}(\eta_{\gamma},S_{\gamma,i})$,
 and the ``true'' calibrated fluxes $F_{i}$. We write the measurement
 and reference residuals, with their respective weights $W_{\gamma i}$
 and $W_{j}$, as separate functions of their parameters, for photometry,
@@ -260,7 +247,7 @@ D_{\gamma i} & =M_{\gamma}(S_{\gamma,i})-P_{\gamma}(F_{i})\label{eq:astrometry_r
 D_{j} & =[P(F_{j})-P(R_{j})]\label{eq:astrometry_residual_vector_reference}
 \end{align}
 This results in the generalized $\chi^{2}$ expression (compare to
-eq. \ref{eq:astrometry-chi2} and \ref{eq:photometry-chi2}),
+eq. \prettyref{eq:astrometry-chi2} and \prettyref{eq:photometry-chi2}),
 
 \begin{align}
 \chi^{2} & =\sum_{\gamma,i}{D_{\gamma i}}^{T}W_{\gamma,i}D_{\gamma i}\nonumber \\
@@ -311,17 +298,17 @@ and solve for the offset $\delta\theta$ that zeroes it to first order,
 H\delta\theta & = & -\nabla\chi^{2}\label{eq:hessian_step}
 \end{eqnarray}
 where we have identified the second derivative matrix with the Hessian
-matrix $H$. Working from eq. \ref{eq:def_chi2_gradient}, we can
-write the second derivative matrix (the Hessian) as:
+matrix $H$. Working from eq. \prettyref{eq:def_chi2_gradient}, we
+can write the second derivative matrix (the Hessian) as:
 \begin{align}
 \frac{1}{2}\frac{d^{2}\chi^{2}}{d\theta^{2}} & =\sum_{\gamma,i}{\nabla D_{\gamma i}}^{T}W_{\gamma,i}\nabla D_{\gamma i}\nonumber \\
  & +\sum_{j}{\nabla D_{j}}^{T}W_{j}\nabla D_{j}\label{eq:def_hessian}
 \end{align}
 where we have neglected the second derivatives of the residual vectors
 $D$. This second derivative matrix is by construction symmetric,
-and hence the parameter offsets (defined in eq. \ref{eq:step_definition})
+and hence the parameter offsets (defined in eq. \prettyref{eq:step_definition})
 can be evaluated using the (fast) Cholesky $LDL^{T}$ factorization
-(see \S \ref{subsec:linear-solver-note}). If possible, mappings
+(see \prettyref{subsec:linear-solver-note}). If possible, mappings
 $M_{\gamma}(\eta_{\gamma},S)$ linear with respect to their parameters
 $\eta_{\gamma}$, for example polynomials, are to be favored because
 the second derivatives will no longer depend on that parameter. If
@@ -348,29 +335,29 @@ and thus we simply have
 \frac{1}{2}\frac{d^{2}\chi^{2}}{d\theta^{2}}=J^{T}J
 \]
 In the code, we take advantage of the fact that each term of the $\chi^{2}$
-only depends on a small number of parameters. The \RoutineName{Model::getMappingIndices}
+only depends on a small number of parameters. The \method{Model::getMappingIndices}
 method allows us to rapidly collect the indices of these parameters,
 and we evaluate the $D$ matrices at these indices only, as all other
 indices are zero.
 
 The computation of the Jacobian and the gradient is performed in the
-respective \ClName{PhotometryFit} and \ClName{AstrometryFit} classes.
-The methods \RoutineName{leastSquareDerivativesMeasurement} and
-\RoutineName{leastSquareDerivativesReference} compute the contributions
-to the Jacobian and gradient of the $\chi^{2}$ from the measurement
-terms and the references terms respectively. In these routines, the
-Jacobian is represented as a list of \ClName{Eigen::Triplets} $(i,j,J_{ij})$
-describing its elements. This list is then transformed into a representation
-of sparse matrices suitable for algebra, and in particular suitable
-to evaluate the product $J^{T}J$. Once we have evaluated $H\equiv J^{T}J$,
-we can solve eq. \ref{eq:hessian_step} using a Cholesky factorization.
-For sparse linear algebra, the Cholmod and Eigen packages provide
-the required functionality. It turns out that for the mappings we
-have currently employed, the calculation of $J^{T}J$ and the factorization
-are the most CPU intensive parts of the calculations, and there is
-hence not much to be gained in speeding up the calculation of derivatives.
-For the factorization, we have tried both Eigen and Cholmod (via the
-Eigen interface) and their speeds differ by less than 10\%.
+respective \class{PhotometryFit} and \class{AstrometryFit} classes.
+The methods \method{leastSquareDerivativesMeasurement} and \method{leastSquareDerivativesReference}
+compute the contributions to the Jacobian and gradient of the $\chi^{2}$
+from the measurement terms and the references terms respectively.
+In these routines, the Jacobian is represented as a list of \class{Eigen::Triplets}
+$(i,j,J_{ij})$ describing its elements. This list is then transformed
+into a representation of sparse matrices suitable for algebra, and
+in particular suitable to evaluate the product $J^{T}J$. Once we
+have evaluated $H\equiv J^{T}J$, we can solve eq. \prettyref{eq:hessian_step}
+using a Cholesky factorization. For sparse linear algebra, the Cholmod
+and Eigen packages provide the required functionality. It turns out
+that for the mappings we have currently employed, the calculation
+of $J^{T}J$ and the factorization are the most CPU intensive parts
+of the calculations, and there is hence not much to be gained in speeding
+up the calculation of derivatives. For the factorization, we have
+tried both Eigen and Cholmod (via the Eigen interface) and their speeds
+differ by less than 10\%.
 
 \subsection{Photometry example}
 
@@ -389,13 +376,13 @@ Computing those derivatives gives us:
 \begin{eqnarray*}
 \nabla D_{\gamma i} & = & (\frac{\partial D_{\gamma i}}{\partial f_{0}^{-1}},\frac{\partial D_{\gamma i}}{\partial a_{0,0}},\ldots,\frac{\partial D_{\gamma i}}{\partial a_{n,m}},\frac{\partial D_{\gamma i}}{\partial F_{i}})
 \end{eqnarray*}
-where, for the measurement terms we have (recall eq. \ref{eq:photometry_residual_vector_measurement}),
+where, for the measurement terms we have (recall eq. \prettyref{eq:photometry_residual_vector_measurement}),
 \begin{eqnarray*}
 \frac{\partial D_{\gamma i}}{\partial f_{0}^{-1}} & = & f_{\gamma i}M_{visit}(a_{j,k}x_{\gamma i},y_{\gamma i})\\
 \frac{\partial D_{\gamma i}}{\partial a_{j,k}} & = & f_{\gamma i}f_{0}^{-1}T_{jk}(u_{\gamma i},v_{\gamma i})\\
 \frac{\partial D_{\gamma i}}{\partial F_{i}} & = & -1
 \end{eqnarray*}
-and for the reference terms (recall eq. \ref{eq:photometry_residual_vector_reference}),
+and for the reference terms (recall eq. \prettyref{eq:photometry_residual_vector_reference}),
 \[
 \nabla D_{j}=\frac{\partial D_{j}}{\partial F_{j}}=1
 \]
@@ -408,27 +395,27 @@ other CCD's relative to that.
 
 \subsection{The astrometric distortion model}
 
-The routines in the \ClName{AstrometryFit} class do not really evaluate
+The routines in the \class{AstrometryFit} class do not really evaluate
 the derivatives of the mappings, but rather defer those to other classes.
 The main reason for this separation is that one could conceive different
 ways to model the mappings from pixel coordinates to the tangent plane,
 and the actual model should be abstract in the routines accumulating
-gradient and Jacobian. The class \ClName{AstrometryModel} is an
-abstract class aiming at connecting generically the fitting routines
-to actual models. We have so far coded two of these models: 
+gradient and Jacobian. The class \class{AstrometryModel} is an abstract
+class aiming at connecting generically the fitting routines to actual
+models. We have so far coded two of these models: 
 \begin{itemize}
-\item \ClName{SimplePolyModel} implements one polynomial mapping per input
-\ClName{CcdImage} (i.e. Calexp). 
-\item \ClName{ConstrainedPolyModel} implements a model where the mapping
+\item \class{SimplePolyModel} implements one polynomial mapping per input
+\class{CcdImage} (i.e. Calexp). 
+\item \class{ConstrainedPolyModel} implements a model where the mapping
 for each CcdImage is a composition of a polynomial for each CCD and
 a polynomial for each exposure. For one of the exposures, the mapping
 should be fixed or the model is degenerate. 
 \end{itemize}
 For example, if one fits 10 exposures from a 36-CCD camera, there
 will be $10\times36$ polynomials to fit with the first model, and
-$10+36$ with the second model. The \ClName{ConstrainedPolyModel}
+$10+36$ with the second model. The \class{ConstrainedPolyModel}
 assumes that the focal plane of the instrument does not change across
-the data set. We could consider coding a model made from one \ClName{ConstrainedPolyModel}
+the data set. We could consider coding a model made from one \class{ConstrainedPolyModel}
 per set of images for which the instrument can be considered as geometrically
 stable. This is similar to how Scamp models the distortions.
 
@@ -443,8 +430,8 @@ to fitting of polynomials.
 
 \subsection{Choice of projectors}
 
-In the least squares expression \ref{eq:astrometry-chi2}, the residuals
-of the measurement terms read: 
+In the least squares expression \prettyref{eq:astrometry-chi2}, the
+residuals of the measurement terms read: 
 \[
 D_{\gamma i}=M_{\gamma}(S_{\gamma i})-P_{\gamma}(F_{i})
 \]
@@ -456,29 +443,29 @@ so that the mapping $M_{\gamma}$ just describes the transformation
 from pixel space to the projection plane. For a SIP WCS, one will
 then naturally choose a gnomonic projector, so that $M_{\gamma}$
 can eventually be split into the ``CD'' matrix and the SIP-specific
-higher order distortion terms (see \S \ref{sec:sip-wcs} for a brief
-introduction to WCS concepts).
+higher order distortion terms (see \prettyref{sec:sip-wcs} for a
+brief introduction to WCS concepts).
 
 So, the choice of the projectors involved in the fit are naturally
-left to the user. This is done via a virtual class \ClName{ProjectionHandler},
-an instance of which has to be provided to the \ClName{AstrometryFit}
-constructor. There are obviously ready-to-use \ClName{ProjectionHandler}
+left to the user. This is done via a virtual class \class{ProjectionHandler},
+an instance of which has to be provided to the \class{AstrometryFit}
+constructor. There are obviously ready-to-use \class{ProjectionHandler}
 implementations which should suit essentially any need. For the standard
-astrometric fit aiming at setting WCS's, we provide the \ClName{OneTPPerShoot}
+astrometric fit aiming at setting WCS's, we provide the \class{OneTPPerShoot}
 derived class, which implements a common projection point for all
 chips of the same exposure. It is fairly easy to implement derived
 classes with other policies.
 
-The choice of the projector appearing in the reference terms of \ref{eq:astrometry-chi2}
-is not left to the user because we could not find a good reason to
-provide this flexibility, and we have implemented a gnomonic projection.
-We use a projector there so that the comparison of positions is done
-using an Euclidean metric.
+The choice of the projector appearing in the reference terms of eq.
+\prettyref{eq:astrometry-chi2} is not left to the user because we
+could not find a good reason to provide this flexibility, and we have
+implemented a gnomonic projection. We use a projector there so that
+the comparison of positions is done using an Euclidean metric.
 
 \subsection{Proper motions and atmospheric refraction}
 
-The expression \ref{eq:astrometry-chi2} above depends on two sets
-of parameters: the parameters defining the mappings and the positions
+The expression \prettyref{eq:astrometry-chi2} above depends on two
+sets of parameters: the parameters defining the mappings and the positions
 $F_{k}$. This expression hides two details implemented in the code:
 accounting for proper motions and differential effects of atmospheric
 refraction.
@@ -487,9 +474,9 @@ Proper motions can be accounted for to predict the expected positions
 of objects and even be considered as fit parameters. At the moment
 we neither have code to detect that some (presumably stellar) object
 is moving, nor code to ingest proper motions from some external catalog.
-Each \ClName{FittedStar} has a flag that says whether it is affected
+Each \class{FittedStar} has a flag that says whether it is affected
 by a proper motion and the proper motion parameters can all be fitted
-or not (see \S \ref{sec:indices_whattofit}).
+or not (see \prettyref{sec:indices_whattofit}).
 
 The code allows to account for differential chromatic effects of atmospheric
 refraction, i.e. the fact that objects positions in the image plane
@@ -510,11 +497,11 @@ to fit images from different bands at the same time. Differences in
 recorded positions across bands will be accounted for in the fitted
 mappings. It is important to do so because we are fitting WCS's, and
 we want the fitted mappings to reflect at best the effects affecting
-measured positions. Since the color correction \ref{eq:refrac_corr}
+measured positions. Since the color correction \prettyref{eq:refrac_corr}
 is not accounted for when using WCS's to transform measured position,
 we have made this correction zero on average. As for proper motions,
 fitting or not these refraction-induced differential position shifts
-is left to the user (see \S \ref{sec:indices_whattofit}).
+is left to the user (see \prettyref{sec:indices_whattofit}).
 
 \subsection{Astrometry example}
 
@@ -524,15 +511,15 @@ of the $\chi^{2}$ on the parameters, that we have decided not to
 track in the derivatives, because these errors mostly depend on the
 mapping scaling, which is very well determined from the beginning.
 However, small changes of scaling can lead to the $\chi^{2}$ increasing
-between iterations. This is why we provide the \ClName{AstrometryModel::freezeErrorScales}
+between iterations. This is why we provide the \method{AstrometryModel::freezeErrorScales}
 which allows one to use the \textit{current} state of the model to
 propagate errors, even if mappings are updated. $dD_{\gamma i}/d\theta$
 has two non-zero blocks: the derivatives with respect to the parameters
 of the $M_{\gamma}$ mapping (which are delivered by the Gtransfo-derived
-class that implements the fitted mapping, namely by the \ClName{Gtransfo::paramDerivatives}
+class that implements the fitted mapping, namely by the \method{Gtransfo::paramDerivatives}
 routine); and the derivative with respect to the $F_{k}$ position
 which reads $dP_{\gamma}(F_{k})/dF_{k}$ (delivered as well by the
-class that implements the projector, via the \ClName{Gtransfo::computeDerivative}
+class that implements the projector, via the \method{Gtransfo::computeDerivative}
 routine).
 
 Regarding reference terms, the matrix $W_{j}$ should be derived from
@@ -542,12 +529,12 @@ delivered for $(\alpha,\delta)$ coordinates):
 W_{j}=(P'^{T}V_{0}P')^{-1}
 \]
 where $P'$ is the derivative of the projector. The inverse of $W_{j}$
-is in practice obtained using the routine \ClName{Gtransfo::transformPosAndErrors}
+is in practice obtained using the routine \method{Gtransfo::transformPosAndErrors}
 which is attached to the projector. The derivative of the reference
-residual $D_{j}$ with respect to the \ClName{FittedStar} position
-$F_{j}$ (see eq. \ref{eq:astrometry_residual_vector_reference}),
+residual $D_{j}$ with respect to the \class{FittedStar} position
+$F_{j}$ (see eq. \prettyref{eq:astrometry_residual_vector_reference}),
 is just the $2\times2$ matrix of the derivative $P'$ of the projector
-$P$, which we compute using \ClName{Gtransfo::computeDerivative}.
+$P$, which we compute using \method{Gtransfo::computeDerivative}.
 
 \subsection{A note about our choice for linear solvers\label{subsec:linear-solver-note}}
 
@@ -560,11 +547,11 @@ improved numerical stability and allows one, if needed, to add constraints
 (via Lagrange multipliers) to the problem. We have also improved the
 Eigen interface to Cholmod by exposing to the user the factorization
 update capability of Cholmod, which considerably speeds up the outlier
-removal. This is done in the \ClName{CholmodSimplicialLDLT2} class.
+removal. This is done in the \class{CholmodSimplicialLDLT2} class.
 Using Cholmod has a drawback: we need its run-time library. Cholmod
 is now packaged in SuiteSparse, much bigger than what we need. This
 is why we{\huge{} }have packaged the smallest possible subset of SuiteSparse
-that fulfills our needs into jointcal\_cholmod.
+that fulfills our needs into \code{jointcal\_cholmod}.
 
 %In the basic tests we have performed (with typically $\sim 1000$ calexps),
 %factorizing the Hessian requires typically 10s while computing the
@@ -577,14 +564,14 @@ some sort of mechanism to associate indices in the vector parameter
 to some subset (e.g. the position of an FittedStar) of these parameters.
 Furthermore, the implementation we have chosen does not allow trivially
 to allocate the actual parameters at successive positions in memory.
-The \RoutineName{AstrometryFit::AssignIndices} takes care of assigning
+The \method{AstrometryFit::AssignIndices} takes care of assigning
 indices to all classes of parameters. For the mappings, the actual
-\ClName{AstrometryModel} implementation does this part of the job.
+\class{AstrometryModel} implementation does this part of the job.
 All these indices are used to properly fill the Jacobian and gradient,
-and eventually to offset parameters in the \RoutineName{AstrometryFit::OffsetParams}.
+and eventually to offset parameters in the \method{AstrometryFit::OffsetParams}.
 
 Since the indexing of parameters is done dynamically, it is straightforward
-to only fit a subset of parameters. This is why the routine \RoutineName{AstrometryFit::AssignIndices}
+to only fit a subset of parameters. This is why the routine \method{AstrometryFit::AssignIndices}
 takes a string argument that specifies what is to be fitted.
 
 \section{Association of the input catalogs \label{sec:catalog-association}}
@@ -594,31 +581,30 @@ is call a ``calexp'' (Calibrated Exposure). Each calexp holds the
 data from one exposure of one CCD, and we associate the ``reduction''
 products, typically a variance map, image mask planes, and the derived
 catalog and WCS obtained by matching the catalog to some external
-reference during single-frame processing. The data that jointcal needs
-from the calexp is stored in a \ClName{CcdImage} object. It stores
-the objects selected from the source catalog (using a configurable
-\ClName{SourceSelector}), the relevant exposure metadata and the
-initial WCS and \ClName{PhotoCalib}.
+reference during single-frame processing. The data that \code{jointcal}
+needs from the calexp is stored in a \class{CcdImage} object. It
+stores the objects selected from the source catalog (using a configurable
+\class{SourceSelector}), the relevant exposure metadata and the initial
+WCS and \class{PhotoCalib}.
 
 \begin{figure}[ht]
 \centering{}\includegraphics[width=0.8\textwidth]{_static/AssocClasses}
 \caption{Chart of class relations which implement the associations between
-input catalogs. One \ClName{FittedStar} usually has several \ClName{MeasuredStar}
-pointing to it, and each \ClName{RefStar} points to exactly one
-\ClName{FittedStar}. Most \ClName{FittedStar's} have no \ClName{RefStar}.
-\label{fig:AssocClasses} }
+input catalogs. One \class{FittedStar} usually has several \class{MeasuredStar}
+pointing to it, and each \class{RefStar} points to exactly one \class{FittedStar}.
+Most \class{FittedStar}'s have no \class{RefStar}. \label{fig:AssocClasses} }
 \end{figure}
 
-The \ClName{Associations} class holds the list of input \ClName{CcdImage's}
+The \class{Associations} class holds the list of input \class{CcdImage}'s
 and connects together the measurements of the same object. The input
-measurements are called \ClName{MeasuredStar} and the common detections
-are called \ClName{FittedStar}. The objects collected in an external
-catalog are called \ClName{RefStar}. Despite their names, these
-classes can represent galaxies as well as stars. The collections of
-sush objects are stored into \ClName{MeasuredStarList}, \ClName{RefStarList}
-and \ClName{FittedStarList}, which are container derived from \ClName{std::list}.
+measurements are called \class{MeasuredStar} and the common detections
+are called \class{FittedStar}. The objects collected in an external
+catalog are called \class{RefStar}. Despite their names, these classes
+can represent galaxies as well as stars. The collections of sush objects
+are stored into \class{MeasuredStarList}, \class{RefStarList} and
+\class{FittedStarList}, which are container derived from \class{std::list}.
 The relations between these classes, all implemented in C++, are displayed
-in figure \ref{fig:AssocClasses}.
+in \prettyref{fig:AssocClasses}.
 
 \section{Fitting the transformations between a set of images}
 
@@ -631,63 +617,16 @@ the series. The calexp series would typically involve the CCD from
 each exposure that covers the region of interest. The package described
 here can fit for the needed mappings: 
 \begin{itemize}
-\item in order to remove all reference terms from the $\chi^{2}$ of eq.~\ref{eq:astrometry-chi2},
-one avoids calling \RoutineName{Associations::CollectRefStars}. 
+\item in order to remove all reference terms from the $\chi^{2}$ of eq.
+\prettyref{eq:astrometry-chi2}, one avoids calling \method{Associations::CollectRefStars}. 
 \item One chooses polynomial mappings for all Calexp except, reserving one
 to serve as a reference with a fixed identity mapping. The distortion
-model \ClName{SimplePolyModel} allows that. 
-\item Chose identity projectors (the class \ClName{IdentityProjector}
-does precisely that). 
+model \class{SimplePolyModel} allows that. 
+\item Chose identity projectors (the class \class{IdentityProjector} does
+precisely that). 
 \end{itemize}
 So, fitting transformations between image sets can be done with the
 provided code.
-
-\section{Run example}
-\begin{verbatim}
-
-        assoc = Associations()
-
-# iterate on the input calexps        
-        for dataRef in ref :
-            src = dataRef.get("src", immediate=True)
-            calexp = dataRef.get("calexp", immediate=True)
-            tanwcs = afwImage.TanWcs.cast(calexp.getWcs())
-            bbox = calexp.getBBox()
-            md = dataRef.get("calexp_md", immediate=True)
-            calib = afwImage.Calib(md)
-            filt = calexp.getFilter().getName()
-# select proper sources            
-            newSrc = ss.select(src, calib)
-
-# actually load the data            
-            assoc.AddImage(newSrc, tanwcs, md, bbox, filt, calib,
-                           dataRef.dataId['visit'], dataRef.dataId['ccd'],
-                           dataRef.getButler().mapper.getCameraName(), 
-                           astromControl)
-
-# carry out the association        
-        matchCut = 3.0
-        assoc.AssociateCatalogs(matchCut)
-# collect reference objects
-        assoc.CollectRefStars(False) # do not project RefStars
-# select objects measured at least twice.
-        assoc.SelectFittedStars()
-# Send back fitted stars on the sky.
-        assoc.DeprojectFittedStars() # required for AstrometryFit
-# Chose a ProjectionHandler
-        sky2TP = OneTPPerShoot(assoc.TheCcdImageList())
-# chose a distortion model
-        spm = SimplePolyModel(assoc.TheCcdImageList(), sky2TP, True, 0)
-# Assemble the whole thing
-        fit = AstrometryFit(assoc,spm)
-# we are ready to run. Initialize parameters by running "partial fits"
-        fit.Minimize("Distortions")
-        fit.Minimize("Positions")
-# now fit both sets simultaneously.
-        fit.Minimize("Distortions Positions")
-# output residual tuples
-        fit.MakeResTuple("res.list")
-\end{verbatim}
 
 \appendix
 
@@ -746,12 +685,12 @@ implements the SIP addition, which consists in applying a 2-d polynomial
 transform to the CCD space coordinates, prior to entering the standard
 WCS chain (affine transform, then de-projection). In practice, the
 SIP ``twisting'' is applied by the LSST software itself (in the
-class \ClName{afw::image::TanWcs}), and the ``standard'' part
-(affine and de-projection, or the reverse transform) are sub-contracted
-to the ``libwcs'' code.
+class \class{afw::image::TanWcs}), and the ``standard'' part (affine
+and de-projection, or the reverse transform) are sub-contracted to
+the ``libwcs'' code.
 
 One common complication of the WCS arena is that it was designed in
-the FITS framework convention, itself highly fortran-biased for array
+the FITS framework convention, itself highly Fortran-biased for array
 indexing, so that the first corner pixel of an image is indexed (1,1).
 The LSST software, and most modern environments use C-like indexing,
 i.e. images stars at (0,0), as well as coordinates in images. The
@@ -780,19 +719,20 @@ Y_{TP}=L\left(X_{pix}-X_{ref}+P_{A}(X_{pix}-X_{ref})\right)
 which again does not depend on the frame choice (0-based or 1-based),
 provided $X_{pix}$ and $X_{ref}$ are expressed in the same frame.
 
-In jointcal ,the internal representation of SIP WCS's uses three straight
-2d$\rightarrow$2d transformations: the SIP correction, the affine
-transformation and the de-projection. Those are just composed to yield
-the actual transform, and the two first ones are generic polynomial
-transformations. We provide routines to translate the TanWcs objects
-into our representation (\RoutineName{ConvertTanWcs}) and back (\RoutineName{GtransfoToTanWcs}).
-In the latter case, we also derive the reverse distortion polynomials,
-which are built if needed in our representation of SIP WCSs.
+In \code{jointcal} ,the internal representation of SIP WCS's uses
+three straight 2d$\rightarrow$2d transformations: the SIP correction,
+the affine transformation and the de-projection. Those are just composed
+to yield the actual transform, and the two first ones are generic
+polynomial transformations. We provide routines to translate the TanWcs
+objects into our representation (\method{ConvertTanWcs}) and back
+(\method{GtransfoToTanWcs}). In the latter case, we also derive the
+reverse distortion polynomials, which are built if needed in our representation
+of SIP WCSs.
 
 \section{Notes on meas\_mosaic (from HSC)}
 
-Naoki Yasuda\emph{ }wrote \emph{meas\_mosaic} for HSC processing,
-with a similar goal as jointcal.
+Naoki Yasuda wrote \emph{meas\_mosaic} for HSC processing, with a
+similar goal as \code{jointcal}.
 
 For photometry, \emph{meas\_mosaic }fits a 7th order Chebyshev polynomial
 on the focal plane, plus a zeropoint offset per CCD. The polynomial
