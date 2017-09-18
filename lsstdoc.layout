@@ -1,0 +1,96 @@
+#% Do not delete the line below; configure depends on this
+#  \DeclareLaTeXClass[lsstdoc, article]{LSST doc (Standard Class based on article)}
+#  \DeclareCategory{Articles}
+# Article textclass definition file. Taken from initial LyX source code
+# Author : Matthias Ettrich <ettrich@informatik.uni-tuebingen.de>
+# Transposed by Pascal André <andre@via.ecp.fr>
+# Heavily modifed and enhanced by serveral developers.
+# modified by John Parejko for LSST doc
+
+# NOTE: To use this with your LyX doc, you can select it as a "Local Layout"
+# NOTE: in Document->Settings->Document Class.
+
+# NOTE: Don't forget to delete the biliography Style from the
+# NOTE: "BibTeX Bibliography" pop-up window, so that no \bibliographystyle{}
+# NOTE: is inserted into the generated LaTeX document.
+
+Format 60
+Input stdclass.inc
+
+SecNumDepth             3
+TocDepth                3
+
+NoStyle Chapter
+NoCounter chapter
+NoStyle Chapter*
+
+# lsstdoc loads a number of packages itself
+Provides amsmath 1
+Provides amssymb 1
+Provides amstext 1
+Provides hyperref 1
+Provides geometry 1
+Provides graphicx 1
+Provides fontspec 1
+Provides color 1
+Provides babel 1
+Provides natbib 1
+Provides xunicode 1
+
+# Provide the Insert->Short Title option
+Style Title
+    Argument 1
+      LabelString   "Short Title|S"
+      Tooltip       "Short title which will appear in the running header"
+      InsertCotext  1
+    EndArgument
+    InPreamble 1
+End
+
+Style Author
+    InPreamble 1
+End
+
+Style Abstract
+    LatexType   Command
+    LatexName   setDocAbstract
+    Category    FrontMatter
+    InPreamble  1
+End
+
+Style DocumentReference
+    LatexType   Command
+    LatexName   setDocRef
+    Align       Center
+    Category    FrontMatter
+    Font
+      Size      Large
+    EndFont
+    InTitle     1
+    InPreamble  1
+End
+
+Style Date
+    InPreamble  1
+End
+
+Style Part
+	Align                 Left
+	AlignPossible         Left
+	TopSep                2
+	BottomSep             1.5
+	Font
+	  Size                Larger
+	EndFont
+End
+
+
+Style Part*
+	Align                 Left
+	AlignPossible         Left
+	TopSep                2
+	BottomSep             1.5
+	Font
+	  Size                Larger
+	EndFont
+End

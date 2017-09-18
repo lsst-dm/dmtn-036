@@ -7,27 +7,30 @@
   .. image:: https://zenodo.org/badge/doi/10.5281/zenodo.#####.svg
      :target: http://dx.doi.org/10.5281/zenodo.#####
 
-###############################
-DMTN-036 The Jointcal algorithm
-###############################
+#################
+DMTN-036 jointcal
+#################
 
 This note describes jointcal’s algorithm, fitting process, and currently available models.
 
-View this technote at https://dmtn-036.lsst.io or see a preview of the current version in `this repo`_.
+**Links**
 
+
+- Live drafts: https://dmtn-036.lsst.io
+- GitHub: https://github.com/lsst-dm/dmtn-036
 
 
 Build this technical note
 =========================
 
-You can clone this repository and build the technote locally with `Sphinx`_
+You can clone this repository and build the technote locally with Latex.
+You must have `lsst-texmf`_ installed.
 
 .. code-block:: bash
 
    git clone https://github.com/lsst-dm/dmtn-036
    cd dmtn-036
-   pip install -r requirements.txt
-   make html
+   make
 
 .. note::
 
@@ -39,8 +42,7 @@ The built technote is located at ``_build/html/index.html``.
 Editing this technical note
 ===========================
 
-You can edit the ``index.rst`` file, which is a reStructuredText document.
-The `DM reStructuredText Style Guide`_ is a good resource for how we write reStructuredText.
+You can edit the ``DMTN-036.tex`` file, which is a latex document.
 
 Remember that images and other types of assets should be stored in the ``_static/`` directory of this repository.
 See ``_static/README.rst`` for more information.
@@ -56,11 +58,10 @@ In this metadata you can edit the technote's title, authors, publication date, e
 
 ****
 
-Copyright 2017 AURA/LSST
+Copyright 2017 Association of Universities for Research in Astronomy, Inc.
 
 This work is licensed under the Creative Commons Attribution 4.0 International License. To view a copy of this license, visit http://creativecommons.org/licenses/by/4.0/.
 
 .. _Sphinx: http://sphinx-doc.org
 .. _DM reStructuredText Style Guide: https://developer.lsst.io/docs/rst_styleguide.html
-.. _this repo: ./index.rst
 .. _Conda: http://conda.pydata.org/docs/
