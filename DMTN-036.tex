@@ -1,4 +1,4 @@
-%% LyX 2.2.3 created this file.  For more info, see http://www.lyx.org/.
+%% LyX 2.3.0 created this file.  For more info, see http://www.lyx.org/.
 %% Do not edit unless you really know what you are doing.
 \documentclass[DM,lsstdraft,toc,authoryear]{lsstdoc}
 \usepackage{prettyref}
@@ -35,7 +35,6 @@ stack.}
 
 \makeatother
 
-\usepackage{xunicode}
 \begin{document}
 \maketitle
 
@@ -327,13 +326,13 @@ expression becomes:
 The sums present in this expression can be performed using matrix
 algebra; we concatenate all the $K$ matrices into a single large,
 sparse matrix (the Jacobian),
-\[
-J\equiv\left[\{K_{\gamma i},\forall\gamma,i\},\{K_{j},\forall j\}\right]
-\]
+\begin{equation}
+J\equiv\left[\{K_{\gamma i},\forall\gamma,i\},\{K_{j},\forall j\}\right]\label{eq:Jacobian}
+\end{equation}
 and thus we simply have 
-\[
-\frac{1}{2}\frac{d^{2}\chi^{2}}{d\theta^{2}}=J^{T}J
-\]
+\begin{equation}
+\frac{1}{2}\frac{d^{2}\chi^{2}}{d\theta^{2}}=J^{T}J\label{eq:gradient_equation}
+\end{equation}
 In the code, we take advantage of the fact that each term of the $\chi^{2}$
 only depends on a small number of parameters. The \method{Model::getMappingIndices}
 method allows us to rapidly collect the indices of these parameters,
@@ -362,14 +361,18 @@ differ by less than 10\%.
 \subsection{Photometry example}
 
 As an illustrative example, we will work through a particular photometry
-mapping, consisting of a constant zero-point per CCD ($f_{0}$: the
-CCD's filter response) and an $(n+m)$th order 2-D Chebyshev polynomial
-($\sum a_{j,k}T_{j}(u)T_{k}(v)$: the optics+sky response, where $(u(x,y),v(x,y))$
-are the focal plane coordinates of pixel $(x,y)$ on a given CCD)
-per visit. Thus, the mapping will be
-\[
-M_{\gamma i}(\eta,S_{\gamma i})=M_{CCD}(f_{0}^{-1},f_{\gamma i})M_{visit}(a_{j,k},x_{\gamma i},y_{\gamma i})=f_{\gamma i}[f_{0}]^{-1}\sum_{j=0}^{j=n}\sum_{k=0}^{k=m}a_{j,k}T_{j}(u_{\gamma i})T_{k}(v_{\gamma i})=\phi_{\gamma i}
-\]
+mapping taking on-chip fluxes and positions $S_{\gamma i}=(f_{\gamma i},x,y)$
+to on-sky fluxes $\phi_{\gamma i}$, consisting of a constant zero-point
+per CCD ($f_{0}$: the CCD's filter response) and an $(n+m)$th order
+2-D Chebyshev polynomial ($\sum a_{j,k}T_{j}(u)T_{k}(v)$: the optics+sky
+response, where $(u(x,y),v(x,y))$ are the focal plane coordinates
+of pixel $(x,y)$ on a given CCD) per visit. Thus, the mapping will
+be
+\begin{eqnarray}
+M_{\gamma}(\eta,S_{\gamma i}) & = & M_{CCD}(f_{0}^{-1},f_{\gamma i})M_{visit}(a_{j,k},x_{\gamma i},y_{\gamma i})\label{eq:photometry-mapping}\\
+ & = & f_{\gamma i}[f_{0}]^{-1}\sum_{j=0}^{j=n}\sum_{k=0}^{k=m}a_{j,k}T_{j}(u_{\gamma i})T_{k}(v_{\gamma i})\nonumber \\
+ & = & \phi_{\gamma i}\nonumber 
+\end{eqnarray}
 where we will fit $f_{0}^{-1}$ instead of $f_{0}$ in order to simplify
 the derivatives (with respect to $\eta=\left(f_{0}^{-1},a_{j,k}\forall j,k\right)$).
 Computing those derivatives gives us:
@@ -377,17 +380,61 @@ Computing those derivatives gives us:
 \nabla D_{\gamma i} & = & (\frac{\partial D_{\gamma i}}{\partial f_{0}^{-1}},\frac{\partial D_{\gamma i}}{\partial a_{0,0}},\ldots,\frac{\partial D_{\gamma i}}{\partial a_{n,m}},\frac{\partial D_{\gamma i}}{\partial F_{i}})
 \end{eqnarray*}
 where, for the measurement terms we have (recall eq. \prettyref{eq:photometry_residual_vector_measurement}),
-\begin{eqnarray*}
-\frac{\partial D_{\gamma i}}{\partial f_{0}^{-1}} & = & f_{\gamma i}M_{visit}(a_{j,k}x_{\gamma i},y_{\gamma i})\\
-\frac{\partial D_{\gamma i}}{\partial a_{j,k}} & = & f_{\gamma i}f_{0}^{-1}T_{jk}(u_{\gamma i},v_{\gamma i})\\
-\frac{\partial D_{\gamma i}}{\partial F_{i}} & = & -1
-\end{eqnarray*}
+\begin{eqnarray}
+\frac{\partial D_{\gamma i}}{\partial f_{0}^{-1}} & = & f_{\gamma i}M_{visit}(a_{j,k}x_{\gamma i},y_{\gamma i})\label{eq:photometry-derivatives}\\
+\frac{\partial D_{\gamma i}}{\partial a_{j,k}} & = & f_{\gamma i}f_{0}^{-1}T_{jk}(u_{\gamma i},v_{\gamma i})\nonumber \\
+\frac{\partial D_{\gamma i}}{\partial F_{i}} & = & -1\nonumber 
+\end{eqnarray}
 and for the reference terms (recall eq. \prettyref{eq:photometry_residual_vector_reference}),
-\[
-\nabla D_{j}=\frac{\partial D_{j}}{\partial F_{j}}=1
-\]
+\begin{equation}
+\nabla D_{j}=\frac{\partial D_{j}}{\partial F_{j}}=1\label{eq:photometry-reference-derivatives}
+\end{equation}
 
 This model is degenerate to multiplying by a scale factor: $M_{CCD}\rightarrow aM_{CCD},M_{visit}\rightarrow a^{-1}M_{visit}$.
+This degeneracy is not removed by the reference catalog. To break
+this degeneracy, we hold fixed one CCD's $f_{0}^{-1}$ (chosen to
+be the CCD closest to the center of the focal plane), and fit all
+other CCD's relative to that.
+
+\subsection{Magnitude-based photometry example}
+
+As an illustrative example, we will work through a particular photometry
+mapping taking on-chip fluxes and positions $S_{\gamma i}=(f_{\gamma i},x,y)$
+to on-sky magnitudes $m_{\gamma i}$, with the transform consisting
+of a constant zero-point per CCD ($f_{0}$: the CCD's filter response)
+and an $(n+m)$th order 2-D Chebyshev polynomial ($\sum a_{j,k}T_{j}(u)T_{k}(v)$:
+the optics+sky response, where $(u(x,y),v(x,y))$ are the focal plane
+coordinates of pixel $(x,y)$ on a given CCD) per visit. Thus, taking
+$m_{CCD}$, $m_{visit}$, as the respective magnitude components,
+the mapping is
+\begin{eqnarray}
+M_{\gamma}(\eta,S_{\gamma i}) & = & m_{\gamma i}+m_{CCD}+m_{visit}\label{eq:magnitude-mapping}\\
+ & = & -2.5\log_{10}(M_{CCD}(f_{0}^{-1},f_{\gamma i}))-2.5\log_{10}(M_{visit}(a_{j,k},x_{\gamma i},y_{\gamma i}))\\
+ & = & m(f_{\gamma i})+m(f_{0}^{-1})+\sum a_{j,k}T_{j}(u)T_{k}(v)\nonumber \\
+ & = & m_{\gamma i}\nonumber 
+\end{eqnarray}
+Making the visit component an additive polynomial of position makes
+the derivatives simpler, while adding complexity to the resulting
+\class{PhotoCalib} (it becomes an exponential term $10^{M_{visit}(x,y)/-2.5}$).
+Computing the derivatives with respect to $\eta=\left(f_{0},a_{j,k}\forall j,k\right)$
+gives us,
+
+\begin{eqnarray*}
+\nabla D_{\gamma i} & = & (\frac{\partial D_{\gamma i}}{\partial f_{0}^{-1}},\frac{\partial D_{\gamma i}}{\partial a_{0,0}},\ldots,\frac{\partial D_{\gamma i}}{\partial a_{n,m}},\frac{\partial D_{\gamma i}}{\partial F_{i}})
+\end{eqnarray*}
+where, for the measurement terms we have (recall eq. \prettyref{eq:photometry_residual_vector_measurement}),
+
+\begin{eqnarray}
+\frac{\partial D_{\gamma i}}{\partial f_{0}^{-1}} & = & 1\label{eq:magnitude-derivatives}\\
+\frac{\partial D_{\gamma i}}{\partial a_{j,k}} & = & T_{jk}(u_{\gamma i},v_{\gamma i})\nonumber \\
+\frac{\partial D_{\gamma i}}{\partial F_{i}} & = & -1\nonumber 
+\end{eqnarray}
+and for the reference terms (recall eq. \prettyref{eq:photometry_residual_vector_reference}),
+\begin{equation}
+\nabla D_{j}=\frac{\partial D_{j}}{\partial F_{j}}=1\label{eq:magnitude-reference-derivatives}
+\end{equation}
+
+This model is degenerate to multiplying by a scale factor: $M_{CCD}\rightarrow aM_{CCD},M_{visit}\rightarrow-aM_{visit}$.
 This degeneracy is not removed by the reference catalog. To break
 this degeneracy, we hold fixed one CCD's $f_{0}^{-1}$ (chosen to
 be the CCD closest to the center of the focal plane), and fit all

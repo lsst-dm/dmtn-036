@@ -1,5 +1,5 @@
-#LyX 2.2 created this file. For more info see http://www.lyx.org/
-\lyxformat 508
+#LyX 2.3 created this file. For more info see http://www.lyx.org/
+\lyxformat 544
 \begin_document
 \begin_header
 \save_transient_properties true
@@ -31,6 +31,8 @@
 \font_osf false
 \font_sf_scale 100 100
 \font_tt_scale 100 100
+\use_microtype false
+\use_dash_ligatures true
 \graphics default
 \default_output_format default
 \output_sync 0
@@ -70,6 +72,7 @@
 \suppress_date false
 \justification true
 \use_refstyle 0
+\use_minted 0
 \index Index
 \shortcut idx
 \color #008000
@@ -82,7 +85,10 @@
 \tocdepth 3
 \paragraph_separation indent
 \paragraph_indentation default
-\quotes_language english
+\is_math_indent 0
+\math_numbering_side default
+\quotes_style english
+\dynamic_quotes 0
 \papercolumns 1
 \papersides 1
 \paperpagestyle default
@@ -211,6 +217,7 @@ sky
 \begin_inset CommandInset citation
 LatexCommand citep
 key "2016A&A...595A...2G"
+literal "true"
 
 \end_inset
 
@@ -223,6 +230,7 @@ SCAMP
 \begin_inset CommandInset citation
 LatexCommand citep
 key "2006ASPC..351..112B"
+literal "true"
 
 \end_inset
 
@@ -293,6 +301,7 @@ Photographic Plates
 \begin_inset CommandInset citation
 LatexCommand citep
 key "1960AN....285..233E"
+literal "true"
 
 \end_inset
 
@@ -304,6 +313,7 @@ SDSS übercal
 \begin_inset CommandInset citation
 LatexCommand citep
 key "2008ApJ...674.1217P"
+literal "true"
 
 \end_inset
 
@@ -315,6 +325,7 @@ Pan-Starrs übercal
 \begin_inset CommandInset citation
 LatexCommand citep
 key "2013ApJS..205...20M"
+literal "true"
 
 \end_inset
 
@@ -326,6 +337,7 @@ DECam WcsFit
 \begin_inset CommandInset citation
 LatexCommand citep
 key "2017PASP..129g4503B"
+literal "true"
 
 \end_inset
 
@@ -1328,17 +1340,17 @@ The sums present in this expression can be performed using matrix algebra;
 
  matrices into a single large, sparse matrix (the Jacobian),
 \begin_inset Formula 
-\[
-J\equiv\left[\{K_{\gamma i},\forall\gamma,i\},\{K_{j},\forall j\}\right]
-\]
+\begin{equation}
+J\equiv\left[\{K_{\gamma i},\forall\gamma,i\},\{K_{j},\forall j\}\right]\label{eq:Jacobian}
+\end{equation}
 
 \end_inset
 
 and thus we simply have 
 \begin_inset Formula 
-\[
-\frac{1}{2}\frac{d^{2}\chi^{2}}{d\theta^{2}}=J^{T}J
-\]
+\begin{equation}
+\frac{1}{2}\frac{d^{2}\chi^{2}}{d\theta^{2}}=J^{T}J\label{eq:gradient_equation}
+\end{equation}
 
 \end_inset
 
@@ -1486,7 +1498,15 @@ Photometry example
 
 \begin_layout Standard
 As an illustrative example, we will work through a particular photometry
- mapping, consisting of a constant zero-point per CCD (
+ mapping taking on-chip fluxes and positions 
+\begin_inset Formula $S_{\gamma i}=(f_{\gamma i},x,y)$
+\end_inset
+
+ to on-sky fluxes 
+\begin_inset Formula $\phi_{\gamma i}$
+\end_inset
+
+, consisting of a constant zero-point per CCD (
 \begin_inset Formula $f_{0}$
 \end_inset
 
@@ -1509,9 +1529,11 @@ th order 2-D Chebyshev polynomial (
  on a given CCD) per visit.
  Thus, the mapping will be
 \begin_inset Formula 
-\[
-M_{\gamma i}(\eta,S_{\gamma i})=M_{CCD}(f_{0}^{-1},f_{\gamma i})M_{visit}(a_{j,k},x_{\gamma i},y_{\gamma i})=f_{\gamma i}[f_{0}]^{-1}\sum_{j=0}^{j=n}\sum_{k=0}^{k=m}a_{j,k}T_{j}(u_{\gamma i})T_{k}(v_{\gamma i})=\phi_{\gamma i}
-\]
+\begin{eqnarray}
+M_{\gamma}(\eta,S_{\gamma i}) & = & M_{CCD}(f_{0}^{-1},f_{\gamma i})M_{visit}(a_{j,k},x_{\gamma i},y_{\gamma i})\label{eq:photometry-mapping}\\
+ & = & f_{\gamma i}[f_{0}]^{-1}\sum_{j=0}^{j=n}\sum_{k=0}^{k=m}a_{j,k}T_{j}(u_{\gamma i})T_{k}(v_{\gamma i})\nonumber \\
+ & = & \phi_{\gamma i}\nonumber 
+\end{eqnarray}
 
 \end_inset
 
@@ -1546,11 +1568,11 @@ reference "eq:photometry_residual_vector_measurement"
 
 ),
 \begin_inset Formula 
-\begin{eqnarray*}
-\frac{\partial D_{\gamma i}}{\partial f_{0}^{-1}} & = & f_{\gamma i}M_{visit}(a_{j,k}x_{\gamma i},y_{\gamma i})\\
-\frac{\partial D_{\gamma i}}{\partial a_{j,k}} & = & f_{\gamma i}f_{0}^{-1}T_{jk}(u_{\gamma i},v_{\gamma i})\\
-\frac{\partial D_{\gamma i}}{\partial F_{i}} & = & -1
-\end{eqnarray*}
+\begin{eqnarray}
+\frac{\partial D_{\gamma i}}{\partial f_{0}^{-1}} & = & f_{\gamma i}M_{visit}(a_{j,k}x_{\gamma i},y_{\gamma i})\label{eq:photometry-derivatives}\\
+\frac{\partial D_{\gamma i}}{\partial a_{j,k}} & = & f_{\gamma i}f_{0}^{-1}T_{jk}(u_{\gamma i},v_{\gamma i})\nonumber \\
+\frac{\partial D_{\gamma i}}{\partial F_{i}} & = & -1\nonumber 
+\end{eqnarray}
 
 \end_inset
 
@@ -1564,9 +1586,9 @@ reference "eq:photometry_residual_vector_reference"
 
 ),
 \begin_inset Formula 
-\[
-\nabla D_{j}=\frac{\partial D_{j}}{\partial F_{j}}=1
-\]
+\begin{equation}
+\nabla D_{j}=\frac{\partial D_{j}}{\partial F_{j}}=1\label{eq:photometry-reference-derivatives}
+\end{equation}
 
 \end_inset
 
@@ -1576,6 +1598,149 @@ reference "eq:photometry_residual_vector_reference"
 \begin_layout Standard
 This model is degenerate to multiplying by a scale factor: 
 \begin_inset Formula $M_{CCD}\rightarrow aM_{CCD},M_{visit}\rightarrow a^{-1}M_{visit}$
+\end_inset
+
+.
+ This degeneracy is not removed by the reference catalog.
+ To break this degeneracy, we hold fixed one CCD's 
+\begin_inset Formula $f_{0}^{-1}$
+\end_inset
+
+ (chosen to be the CCD closest to the center of the focal plane), and fit
+ all other CCD's relative to that.
+\end_layout
+
+\begin_layout Subsection
+Magnitude-based photometry example
+\end_layout
+
+\begin_layout Standard
+As an illustrative example, we will work through a particular photometry
+ mapping taking on-chip fluxes and positions 
+\begin_inset Formula $S_{\gamma i}=(f_{\gamma i},x,y)$
+\end_inset
+
+ to on-sky magnitudes 
+\begin_inset Formula $m_{\gamma i}$
+\end_inset
+
+, with the transform consisting of a constant zero-point per CCD (
+\begin_inset Formula $f_{0}$
+\end_inset
+
+: the CCD's filter response) and an 
+\begin_inset Formula $(n+m)$
+\end_inset
+
+th order 2-D Chebyshev polynomial (
+\begin_inset Formula $\sum a_{j,k}T_{j}(u)T_{k}(v)$
+\end_inset
+
+: the optics+sky response, where 
+\begin_inset Formula $(u(x,y),v(x,y))$
+\end_inset
+
+ are the focal plane coordinates of pixel 
+\begin_inset Formula $(x,y)$
+\end_inset
+
+ on a given CCD) per visit.
+ Thus, taking 
+\begin_inset Formula $m_{CCD}$
+\end_inset
+
+, 
+\begin_inset Formula $m_{visit}$
+\end_inset
+
+, as the respective magnitude components, the mapping is
+\begin_inset Formula 
+\begin{eqnarray}
+M_{\gamma}(\eta,S_{\gamma i}) & = & m_{\gamma i}+m_{CCD}+m_{visit}\label{eq:magnitude-mapping}\\
+ & = & -2.5\log_{10}(M_{CCD}(f_{0}^{-1},f_{\gamma i}))-2.5\log_{10}(M_{visit}(a_{j,k},x_{\gamma i},y_{\gamma i}))\\
+ & = & m(f_{\gamma i})+m(f_{0}^{-1})+\sum a_{j,k}T_{j}(u)T_{k}(v)\nonumber \\
+ & = & m_{\gamma i}\nonumber 
+\end{eqnarray}
+
+\end_inset
+
+Making the visit component an additive polynomial of position makes the
+ derivatives simpler, while adding complexity to the resulting 
+\begin_inset ERT
+status open
+
+\begin_layout Plain Layout
+
+
+\backslash
+class{PhotoCalib}
+\end_layout
+
+\end_inset
+
+ (it becomes an exponential term 
+\begin_inset Formula $10^{M_{visit}(x,y)/-2.5}$
+\end_inset
+
+).
+ Computing the derivatives with respect to 
+\begin_inset Formula $\eta=\left(f_{0},a_{j,k}\forall j,k\right)$
+\end_inset
+
+ gives us,
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray*}
+\nabla D_{\gamma i} & = & (\frac{\partial D_{\gamma i}}{\partial f_{0}^{-1}},\frac{\partial D_{\gamma i}}{\partial a_{0,0}},\ldots,\frac{\partial D_{\gamma i}}{\partial a_{n,m}},\frac{\partial D_{\gamma i}}{\partial F_{i}})
+\end{eqnarray*}
+
+\end_inset
+
+where, for the measurement terms we have (recall eq.
+ 
+\begin_inset CommandInset ref
+LatexCommand formatted
+reference "eq:photometry_residual_vector_measurement"
+
+\end_inset
+
+),
+\end_layout
+
+\begin_layout Standard
+\begin_inset Formula 
+\begin{eqnarray}
+\frac{\partial D_{\gamma i}}{\partial f_{0}^{-1}} & = & 1\label{eq:magnitude-derivatives}\\
+\frac{\partial D_{\gamma i}}{\partial a_{j,k}} & = & T_{jk}(u_{\gamma i},v_{\gamma i})\nonumber \\
+\frac{\partial D_{\gamma i}}{\partial F_{i}} & = & -1\nonumber 
+\end{eqnarray}
+
+\end_inset
+
+and for the reference terms (recall eq.
+ 
+\begin_inset CommandInset ref
+LatexCommand formatted
+reference "eq:photometry_residual_vector_reference"
+
+\end_inset
+
+),
+\begin_inset Formula 
+\begin{equation}
+\nabla D_{j}=\frac{\partial D_{j}}{\partial F_{j}}=1\label{eq:magnitude-reference-derivatives}
+\end{equation}
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+This model is degenerate to multiplying by a scale factor: 
+\begin_inset Formula $M_{CCD}\rightarrow aM_{CCD},M_{visit}\rightarrow-aM_{visit}$
 \end_inset
 
 .
@@ -2407,6 +2572,7 @@ In the LSST stack
 \begin_inset CommandInset citation
 LatexCommand citep
 key "LDM-151"
+literal "true"
 
 \end_inset
 
