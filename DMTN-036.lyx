@@ -3396,6 +3396,17 @@ FLUXMAG0ERR
 \end_layout
 
 \begin_layout Standard
+\begin_inset CommandInset include
+LatexCommand input
+preview true
+filename "dense-via-vp.tex"
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
 \begin_inset CommandInset bibtex
 LatexCommand bibtex
 bibfiles "lsst,lsst-dm,refs,refs_ads,books,jointcal"
