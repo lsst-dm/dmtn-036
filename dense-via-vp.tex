@@ -252,3 +252,46 @@ While this makes it seem as though we only need $V_i$ from each QR factorization
 \begin{align}
     \mu_i &= - P_i R_i^{-1} U_i^T \left(z_i + B_i\nu\right)
 \end{align}
+
+\subsection{Implementation Concerns}
+
+\subsubsection{Sparsity}
+
+While the rows of each $B_i$ correspond only to the measurements of \class{FittedStar} $i$, the columns correspond to all non-star parameters, even those that correspond to observations that do not have a measurement for that star..
+When the dataset is wide enough to cover many focal planes (or there are more CCD parameters than focal-plane-wide parameters), each $B_i$ could thus have many zero-valued columns and $H$ could have many zero elements.
+It may make sense to explicitly account for one or both of these in the accumulation of $H$ and $g$ and/or the final solutions for $\mu_i$.
+
+The first step -- and probably the only one worth taking before evidence this is actually a problem -- would be to store each $B_i$ as a sequence of matrix blocks (each corresponding to the parameters of one or more visits or CCDs relevant for star $i$) and their column offsets into the larger matrix, with each block having the same row extent (corresponding to the measurements and reference positions for $i$).
+The product $V_i^T B_i$ could be stored in the same way (it has the same columns, but different rows), and computed as the standard dense matrix product of $V_i^T$ with each block of $B_i$.
+
+Accumulating $H$ from this data structure would involve computing the inner product of all combinations of $V_i^T B_i$ blocks and adding the results to the blocks of $H$ that correspond to their offsets.
+Accumulating $g$ would similarly involve computing the matrix-vector product of each block with $V_i^T z_i$ and adding the results to the appropriate segments of $g$.
+
+If necessary, we could build $H$ as a sparse matrix using the same routine, and then use a sparse solver, but at least in our current mode of operation the full $H$ should have a fill factor close to unity, even if individual updates to it are (block) sparse.
+
+\subsubsection{Line Searches}
+
+The theoretical (but not numerical) equivalence between this approach and a direct sparse solution to the full problem breaks down if we use a line search to adjust the step size after computing the Gauss-Newton step $\delta\theta$, unless we apply the same scaling factor to both $\mu_i$ and $\nu$.
+That would entail a new factorization of $H$ at every test point in the line search and break the simplified version of $H$ we obtained by using QR factorization.
+That makes it almost certainly a bad idea -- it would be much better to simply always accept the full step for $\mu_i$, and if necessary perform a line search on $\nu$ only.
+
+\subsubsection{Outlier Rejection}
+
+Updating $H$ to reflect the removal of some \class{FittedStar}s as outliers is straightforward -- one can simply subtract in the terms in the sum that correspond to those stars.
+If we end up spending most of our time accumulating $H$ rather than factoring it, an outlier rejection approach much like the current one may still be viable.
+If not, we will need to make other changes; I don't think a rank-update approach of the type we had in the sparse system is possible.
+
+An obvious mitigation would be to work on reducing the number of outliers we need to reject (by better filtering the input catalogs or adding motion parameters); another would deferring/bundling outliers to reduce the number of factorizations.
+In the latter category, we should certainly consider simply rejecting outliers once (perhaps more agressively) every step, and then just factoring the reduced matrix and computing the next step once, after that is complete.
+
+We may be able to find an iterative factorization that can make use of a ``warm start'' (i.e. the factorization of the very similar $H$ before the effect of some outliers was removed) to converge much more quickly, but I am fairly confident that this is not something a Cholesky factorization can ever do, and it's probably that the base speed of warm-start capable solver is too much slower than Cholesky to be worthwhile.
+I don't think any of the solvers in Eigen have this functionality.
+
+\subsubsection{Parallelization}
+
+One potential advantage of switching to dense solvers is that we're much more likely to be able to find a parallel implementation.
+The per-star subproblems are also completely independent, and could be run in parallel as well if we can get OpenMP working at all with our build system and dependencies.
+
+This is potentially extremely valuable: there are many fewer invocations of jointcal (i.e. one per tract) than most other pipeline steps, so we should always have plenty of cores to throw at it if it can make use of them.
+
+I would not advocate trying to add multithreading at the same time we switch to this new approach to solving the linear algebra, but it would be worth keeping in mind when restructuring the code (e.g. by making the inputs and outputs of each per-\class{FittedStar} subproblem routine explicit as arguments or return values, rather than utilizing class data members that might be dangerous to share across threads).
