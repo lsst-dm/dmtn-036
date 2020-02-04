@@ -174,7 +174,7 @@ This is enough to see the outlines of the algorithm:
 \end{itemize}
 The per-\class{FittedStar} subproblems are tiny and dense, while the reduced final problem should usually be small enough that a dense factorization is probably more efficient than a sparse one (especially if using a dense solver makes a parallel algorithm available).
 
-\subsubsection{Simplification via QR Factorization}
+\subsection{Simplification via QR Factorization}
 
 The algorithm derived in the last section is the bulk of this proposal, and it should work regardless of the details of the factorization used to solve the subproblems or the reduced problem.
 Using a QR factorization of each $A_i$ in the subproblems \prettyref{eq:vp_star_subproblem} simplifies the linear algebra involved in substituting $\mu_i$ back into \prettyref{eq:vp_reduced_problem}, however, so working through that approach seems worthwhile.
@@ -248,7 +248,17 @@ and rearrange to obtain
         -\sum_i B_i^T V_i V_i^T z_i \\
     H\nu &= -g.
 \end{align}
-We can use this to accumulate the reduced Hessian $H$ and gradient $g$, factor $H$ using the solver of our choice (dense $LDL^T$ seems reasonable), and solve for $\nu$ at every iteration.
+We can use this to accumulate the reduced Hessian $H$ and gradient $g$ from their per-star contributions, factor $H$ using the solver of our choice (dense $LDL^T$ seems reasonable), and solve for $\nu$ at every iteration.
+For clarity below, it is useful to define symbols for the contibutions $H_i$ and $g_i$ from star $i$ to $H$ and $g$ (respectively):
+\begin{align}
+    H_i &\equiv B_i^T V_i V_i^T B_i = K_i^T K_i \\
+    g_i &\equiv B_i^T V_i V_i^T z_i = K_i^T r_i
+\end{align}
+and
+\begin{align}
+    K_i &\equiv V_i^T B_i \\
+    r_i &\equiv V_i^T z
+\end{align}
 
 While this makes it seem as though we only need $V_i$ from each QR factorization, note that we will need the full factorization (along with reduced solution $\nu$ for each iteration) to go back and fully solve for the step $\mu_i$ for each \class{FittedStar} as well.
 
@@ -256,32 +266,78 @@ While this makes it seem as though we only need $V_i$ from each QR factorization
 
 \subsubsection{Using Eigen}
 
-\texttt{Eigen::ColPivHousehoulderQR} computes exactly the factorization QR factorization \prettyref{eq:vp_star_qr}.
+\texttt{Eigen::ColPivHousehoulderQR} computes exactly the QR factorization in \prettyref{eq:vp_star_qr}.
 I suspect there is some way to use its \texttt{householderQ} method to form matrix products with $V_i$ more efficiently than it would be to use the \texttt{matrixQ} method and perform a direct matrix multiplication, but I'm not certain, and it's probably not worth worrying about unless a profile shows those matrix products to be hotspots.
 I have not tried to work out exactly how best to solve for for $\mu_i$ given that factorization and $\nu$; ideally we'd express that via a call to the \texttt{solve} method, but we may need to use other terms in the factorization to compute the appropriate right-hand-side vector for that.
 
 \subsubsection{Sparsity}
 
-While the rows of each $B_i$ correspond only to the measurements of \class{FittedStar} $i$, the columns correspond to all non-star parameters, even those that correspond to observations that do not have a measurement for that star.
-When the full set of input observations is is wide enough to cover many focal planes (or there are more global parameters than per-visit parameters), each $B_i$ could thus have many zero-valued columns and (less likely) $H$ could have many zero elements.
-It may make sense to explicitly account for one or both of these in the accumulation of $H$ and $g$ and/or the final solutions for $\mu_i$.
+While the rows of each $B_i$ correspond only to the measurements of \class{FittedStar} $i$, the columns correspond to all non-star parameters, even those associated with model terms (visits or CCDs) that do not have a measurement for that star, and hence some will be entirely zero.
+When the full set of input observations is is wide enough to cover many focal planes (or there are more global parameters than per-visit parameters), each $B_i$ could thus have many zero-valued columns and its contribution $H_i$ will be even more sparse.
+It may make sense to explicitly account for this in the accumulation of $H$ and $g$ and/or the final solutions for $\mu_i$.
 
 The first step -- and probably the only one worth considering for now -- would be to store each $B_i$ as a sequence of matrix blocks (each corresponding to the parameters of one or more visits or CCDs relevant for star $i$) and their column offsets into the larger matrix, with each block having the same row extent (corresponding to the measurements and reference positions for $i$).
-The product $V_i^T B_i$ could be stored in the same way (it has the same columns, but different rows), and computed as the standard dense matrix product of $V_i^T$ with each block of $B_i$.
+The product $K_i \equiv V_i^T B_i$ could be stored in the same way (it has the same columns, but different rows), and computed as the standard dense matrix product of $V_i^T$ with each block of $B_i$.
+For example, if some $B_i$ has the block form:
+\begin{align}
+    B_i &= \left[
+        \begin{array}{ c c c c c c }
+            B_i^{(1)} & B_i^{(2)} & 0 & 0 & B_i^{(5)} & 0
+        \end{array}
+    \right]
+\end{align}
+then $K_i$ has the same form (with $K_i^{(j)} \equiv V_i^T B_i^{(j)}$):
+\begin{align}
+    K_i &= \left[
+        \begin{array}{ c c c c c c }
+            K_i^{(1)} & K_i^{(2)} & 0 & 0 & K_i^{(5)} & 0
+        \end{array}
+    \right],
+\end{align}
+and we would store only $K_i^{(1)}$, $K_i^{(2)}$, and $K_i^{(5)}$ and their column offsets (note that the superscript indices here are not meaningful; these blocks may represent visits, CCDs, or groups thereof).
 
-Accumulating $H$ from this data structure would involve computing the inner product of all combinations of $V_i^T B_i$ blocks and adding the results to the blocks of $H$ that correspond to their offsets.
-Accumulating $g$ would similarly involve computing the matrix-vector product of each block with $V_i^T z_i$ and adding the results to the appropriate segments of $g$.
+Accumulating $H$ from this data structure would involve computing the inner product of all combinations of $K_i$ blocks and adding the results to the blocks of $H$ that correspond to their offsets; using the same example as above, the contribution $H_i$ from that \class{FittedStar} would look like:
+\begin{align}
+    H_i &= \left[
+        \begin{array}{ c c c c c c }
+            K_i^{(1) T} K_i^{(1)} & K_i^{(1) T} K_i^{(2)} & 0 & 0 & K_i^{(1) T} K_i^{(5)} & 0 \\
+            K_i^{(2) T} K_i^{(1)} & K_i^{(2) T} K_i^{(2)} & 0 & 0 & K_i^{(2) T} K_i^{(5)} & 0 \\
+            0 & 0 & 0 & 0 & 0 & 0 \\
+            0 & 0 & 0 & 0 & 0 & 0 \\
+            K_i^{(5) T} K_i^{(1)} & K_i^{(5) T} K_i^{(2)} & 0 & 0 & K_i^{(5) T} K_i^{(5)} & 0 \\
+            0 & 0 & 0 & 0 & 0 & 0
+        \end{array}
+    \right].
+\end{align}
 
-If necessary, we could build $H$ as a sparse matrix using the same routine, and then use a sparse solver, but at least in our current (per-tract) mode of operation the full $H$ should have a fill factor close to unity, even if individual updates to it are (block) sparse.
+Accumulating $g$ would similarly involve computing the matrix-vector product of each block with $r_i = V_i^T z_i$ and adding the results to the appropriate segments of $g$:
+\begin{align}
+    g_i &= \left[
+        \begin{array}{ c }
+            K_i^{(1) T} r_i \\
+            K_i^{(2) T} r_i \\
+            0 \\
+            0 \\
+            K_i^{(5) T} r_i \\
+            0
+        \end{array}
+    \right].
+\end{align}
+We do not expect $r_i$ to have many zero elements, so no special storage will be useful there.
 
-If we do ever have many more global parameters than per-visit parameters (e.g. by fitting the optical distortion as a constant, and the per-visit atmospheric contribution is lower-order), it may be worth trying to the same approach again, by solving per-visit subproblems and accumulating those to form a reduced Hessian containing only the global parameters.
-I have not attempted to derive this extension, and am by no means certain that it is even viable (it depends on whether the partially-reduced Hessian has a block structure we can take advantage of).
+Note that while each $H_i$ is sparse, the full $H$ will not be, at least in our current mode of operation (per-tract, with tracts approximately the scale of a visit).
+If that changes, we could instead accumulate into a sparse matrix and again use a sparse solver (but still on a much smaller-scale problem, albeit one with a larger fill factor).
+
+If we ever have many more global parameters than per-visit parameters (e.g. by fitting the optical distortion as a constant, and the per-visit atmospheric contribution is lower-order), it may be worth trying to the same approach again, by solving per-visit subproblems and accumulating those to form a fully-reduced Hessian containing only the global parameters.
+I have not attempted to derive this extension, and am by no means certain that it is even viable (it depends on whether the partially-reduced Hessian $H$ derived above also has a block structure we can take advantage of).
+I would certainly try a sparse solver on $H$ first.
 
 \subsubsection{Line Searches}
 
 The theoretical (but not numerical) equivalence between this approach and a direct sparse solution to the full problem breaks down if we use a line search to adjust the step size after computing the Gauss-Newton step $\delta\theta$, unless we apply the same scaling factor to both $\mu_i$ and $\nu$.
-That would entail a new factorization of $H$ at every test point in the line search and break the simplified version of $H$ we obtained by using QR factorization.
+That would entail a new factorization of $H$ at every test point in the line search and break the simplified formula for $H$ we obtained by using QR factorization.
 That makes it almost certainly a bad idea -- it would be much better to simply always accept the full step for $\mu_i$, and if necessary perform a line search on $\nu$ only.
+This makes sense algorithmically, too -- we would essentially be assuming that our model positions for stars are always very close to the final solution, even if we are not as confident that we are close to the final solution for other parameters.
 
 \subsubsection{Outlier Rejection}
 
@@ -289,11 +345,8 @@ Updating the reduced $H$ and $g$ to reflect the removal of some \class{FittedSta
 If we end up spending most of our time accumulating $H$ rather than factoring it, an outlier rejection approach much like the current one may still be viable.
 If not, we will need to make other changes; I don't think a rank-update approach of the type we had in the sparse system is possible.
 
-An obvious mitigation would be to work on reducing the number of outliers we need to reject (by better filtering the input catalogs or adding motion parameters); another would deferring/bundling outliers to reduce the number of factorizations.
-In the latter category, we should certainly consider simply rejecting outliers once (perhaps more agressively) every step, and then just factoring the reduced matrix and computing the next step once, after that is complete.
-
-We may be able to find an iterative factorization that can make use of a ``warm start'' (i.e. the factorization of the very similar $H$ before the effect of some outliers was removed) to converge much more quickly, but I am fairly confident that this is not something a Cholesky factorization can ever do, and it's probable that the base speed of any warm-start capable solver is too much slower than Cholesky to be worthwhile.
-I don't think any of the solvers in Eigen have this functionality.
+An obvious mitigation would be to work on reducing the number of outliers we need to reject (by better filtering the input catalogs or adding motion parameters); another would be deferring/bundling outliers to reduce the number of factorizations.
+In the latter category, we should certainly consider simply rejecting a group of outliers once (perhaps more agressively) every step, and then just factoring the reduced matrix and computing the next step, instead of iterating to reject multiple groups of outliers every step.
 
 \subsubsection{Parallelization}
 
@@ -303,3 +356,6 @@ The per-star subproblems are also completely independent, and could be run in pa
 This is potentially extremely valuable: there are many fewer invocations of jointcal (i.e. one per tract) than most other pipeline steps, so we should always have plenty of cores to throw at it if it can make use of them.
 
 I would not advocate trying to add multithreading at the same time we switch to this new approach to solving the linear algebra, but it would be worth keeping in mind when restructuring the code (e.g. by making the inputs and outputs of each per-\class{FittedStar} subproblem routine explicit as arguments or return values, rather than utilizing class data members that might be dangerous to share across threads).
+
+It's also worth noting that while Eigen can be configured to use OpenMP, this is a compile-time option, and I don't think it's something we could turn on in Jointcal only without a lot of build-system cleverness and wrapping (we had the same problem with \texttt{meas\_mosaic}).
+Eigen's parallel implementations also aren't nearly as optimized as their single-threaded versions, so if we do want to use a parallel solver for the reduced problem, I'd just look for a different one.
