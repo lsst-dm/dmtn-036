@@ -89,7 +89,6 @@ To proceed, we now have to specify an ordering for the elements of the parameter
     \item We start with the positional parameters ($F_i$ in \prettyref{sec:mathematical-formalism}), and, in the future, proper motion and parallax, for each star $i$, in the same order we used for the data.
     For notational consistency (using lowercase Greek symbols for free parameters), we will call a segment of $\delta\theta$ for these parameters $\mu_i$ and their concatenation $\mu$.
     \item We finish with all other parameters that are not per-star, using $\nu$ for that segment of $\delta\theta$.
-    We will discuss an extension that puts any per-visit parameters before any camera constant parameters below, but for now do not need to distinguish between them.
 \end{itemize}
 
 These bullets can be expressed as in block-matrix form as
@@ -133,7 +132,7 @@ where
     B_i &\equiv \nabla_{\nu} z_i.
 \end{align}
 The block-diagonal structure of $A$ is what makes this method practical; it comes about because the derivative of the residuals for one star with respect to the parameters of some other star is zero.
-Note the number of columns in $A$ (typically $\sim 10^5$) is much larger than the number of columns in $B$ ($\sim 10^3$), but the number of columns in a particular $A_i$ (only 2, or perhaps 5 if stellar motion is being fit) is much smaller than the number of columns in a particular $B_i$ (which is the same for all $B_i$, and the same as the full $B$: $\sim 10^3$).
+Note that the total number of columns in $A$ (typically $\sim 10^5$) is much larger than the number of columns in $B$ ($\sim 10^3$), but the number of columns in a particular $A_i$ (only 2, or perhaps 5 if stellar motion is being fit) is much smaller than the number of columns in a particular $B_i$ (which is the same for all $B_i$, and the same as the full $B$: $\sim 10^3$).
 
 Using the compressed block form, we can expand \prettyref{eq:vp_gradient_equation} as
 \begin{align}
@@ -264,10 +263,46 @@ and
 \end{align}
 
 While this makes it seem as though we only need $V_i$ from each QR factorization, note that we will need the full factorization (along with reduced solution $\nu$ for each iteration) to go back and fully solve for the step $\mu_i$ for each \class{FittedStar} as well.
-As discussed below in \prettyref{sec:vp_local_linearity}, $A_i$ should be approximately constant across iterations, so we should actually be able to compute the per-star QR factorizations once up front.
+As discussed below in \prettyref{subsec:vp_local_linearity}, $A_i$ should be approximately constant across iterations, so we should actually be able to compute the per-star QR factorizations once up front.
 
-\subsection{Utilizing Local Linearity}
-\label{sec:vp_local_linearity}
+\subsection{Implementation Concerns}
+
+\subsubsection{Minimizing Refactoring}
+
+I believe jointcal already has routines that evaluate the model derivatives $J$ in the form of a sequence of \texttt{Eigen::Triplet} objects.
+If so, these should contain all of the elements of $A_i$ and $B_i$ we need, and the easiest way to migrate to this algorithm would be to instead utilize those triplets to build those blocks as dense matrices instead.
+If the ordering of rows (measurements) is already consistent with that required by this approach (or can easily be made consistent by manipulating the index-calculation code), that could be done by forming the full $J$ as a sparse matrix and using Eigen block-slicing to obtain $A_i$ and $B_i$ from it.
+
+This may rule out or weaken some of the potential optimizations described in \prettyref{sec:vp_further_optimization}, but as those mostly correspond to operations that are currently negligible in the compute budget, that's a reasonable starting point.
+If this minimal modification proves promising, but we're still not happy with the overall performance, we can then consider refactoring the model- and derivative-evaluation code.
+
+\subsubsection{Line Searches}
+
+The theoretical (but not numerical) equivalence between this approach and a direct sparse solution to the full problem breaks down if we use a line search to adjust the step size after computing the Gauss-Newton step $\delta\theta$, unless we apply the same scaling factor to both $\mu_i$ and $\nu$.
+That would entail a new factorization of $H$ at every test point in the line search and break the simplified formula for $H$ we obtained by using QR factorization.
+That makes it almost certainly a bad idea -- it would be much better to simply always accept the full step for $\mu_i$, and if necessary perform a line search on $\nu$ only.
+This makes sense algorithmically, too -- we would essentially be assuming that our model positions for stars are always very close to the final solution, even if we are not as confident that we are close to the final solution for other parameters.
+
+\subsubsection{Outlier Rejection}
+
+Updating the reduced $H$ and $g$ to reflect the removal of some \class{FittedStar}s as outliers is straightforward -- one can simply subtract in the terms in the sums that correspond to those stars.
+If we end up spending most of our time accumulating $H$ rather than factoring it, an outlier rejection approach much like the current one may still be viable.
+If not, we will need to make other changes; I don't think a rank-update approach of the type we had in the sparse system is possible.
+
+An obvious mitigation would be to work on reducing the number of outliers we need to reject (by better filtering the input catalogs or adding motion parameters); another would be deferring/bundling outliers to reduce the number of factorizations.
+In the latter category, we should certainly consider simply rejecting a group of outliers once (perhaps more agressively) every step, and then just factoring the reduced matrix and computing the next step, instead of iterating to reject multiple groups of outliers every step.
+
+\subsubsection{Using Eigen}
+
+\texttt{Eigen::ColPivHousehoulderQR} computes exactly the QR factorization in \prettyref{eq:vp_star_qr}.
+I suspect there is some way to use its \texttt{householderQ} method to form matrix products with $V_i$ more efficiently than it would be to use the \texttt{matrixQ} method and perform a direct matrix multiplication, but I'm not certain, and it's probably not worth worrying about unless a profile shows those matrix products to be hotspots.
+I have not tried to work out exactly how best to solve for for $\mu_i$ given that factorization and $\nu$; ideally we'd express that via a call to the \texttt{solve} method, but we may need to use other terms in the factorization to compute the appropriate right-hand-side vector for that.
+
+\subsection{Further Optimization}
+\label{sec:vp_further_optimization}
+
+\subsubsection{Utilizing Local Linearity}
+\label{subsec:vp_local_linearity}
 
 The residual vectors $D_i$ have the form
 \begin{align}
@@ -336,17 +371,10 @@ We can then approximate $B_i$ as
         \right]
 \end{align}
 I strongly suspect that jointcal already makes this approximation, but I also suspect that jointcal currently recomputes $W_i$ and hence $W_i^{1/2}$ at every iteration even though it should be safe to consider it constant throughout the fit.
-Of course, even if it does, it's a negligible part of the compute budget.
-
-\subsection{Implementation Concerns}
-
-\subsubsection{Using Eigen}
-
-\texttt{Eigen::ColPivHousehoulderQR} computes exactly the QR factorization in \prettyref{eq:vp_star_qr}.
-I suspect there is some way to use its \texttt{householderQ} method to form matrix products with $V_i$ more efficiently than it would be to use the \texttt{matrixQ} method and perform a direct matrix multiplication, but I'm not certain, and it's probably not worth worrying about unless a profile shows those matrix products to be hotspots.
-I have not tried to work out exactly how best to solve for for $\mu_i$ given that factorization and $\nu$; ideally we'd express that via a call to the \texttt{solve} method, but we may need to use other terms in the factorization to compute the appropriate right-hand-side vector for that.
+Of course, even if it does, it's a negligible part of the compute budget at present.
 
 \subsubsection{Sparsity}
+\label{subsec:vp_sparsity}
 
 While the rows of each $B_i$ correspond only to the measurements of \class{FittedStar} $i$, the columns correspond to all non-star parameters, even those associated with model terms (visits or CCDs) that do not have a measurement for that star, and hence some will be entirely zero.
 When the full set of input observations is is wide enough to cover many focal planes (or there are more global parameters than per-visit parameters), each $B_i$ could thus have many zero-valued columns and its contribution $H_i$ will be even more sparse.
@@ -407,22 +435,6 @@ If that changes, we could instead accumulate into a sparse matrix and again use 
 If we ever have many more global parameters than per-visit parameters (e.g. by fitting the optical distortion as a constant, and the per-visit atmospheric contribution is lower-order), it may be worth trying to the same approach again, by solving per-visit subproblems and accumulating those to form a fully-reduced Hessian containing only the global parameters.
 I have not attempted to derive this extension, and am by no means certain that it is even viable (it depends on whether the partially-reduced Hessian $H$ derived above also has a block structure we can take advantage of).
 I would certainly try a sparse solver on $H$ first.
-
-\subsubsection{Line Searches}
-
-The theoretical (but not numerical) equivalence between this approach and a direct sparse solution to the full problem breaks down if we use a line search to adjust the step size after computing the Gauss-Newton step $\delta\theta$, unless we apply the same scaling factor to both $\mu_i$ and $\nu$.
-That would entail a new factorization of $H$ at every test point in the line search and break the simplified formula for $H$ we obtained by using QR factorization.
-That makes it almost certainly a bad idea -- it would be much better to simply always accept the full step for $\mu_i$, and if necessary perform a line search on $\nu$ only.
-This makes sense algorithmically, too -- we would essentially be assuming that our model positions for stars are always very close to the final solution, even if we are not as confident that we are close to the final solution for other parameters.
-
-\subsubsection{Outlier Rejection}
-
-Updating the reduced $H$ and $g$ to reflect the removal of some \class{FittedStar}s as outliers is straightforward -- one can simply subtract in the terms in the sums that correspond to those stars.
-If we end up spending most of our time accumulating $H$ rather than factoring it, an outlier rejection approach much like the current one may still be viable.
-If not, we will need to make other changes; I don't think a rank-update approach of the type we had in the sparse system is possible.
-
-An obvious mitigation would be to work on reducing the number of outliers we need to reject (by better filtering the input catalogs or adding motion parameters); another would be deferring/bundling outliers to reduce the number of factorizations.
-In the latter category, we should certainly consider simply rejecting a group of outliers once (perhaps more agressively) every step, and then just factoring the reduced matrix and computing the next step, instead of iterating to reject multiple groups of outliers every step.
 
 \subsubsection{Parallelization}
 
