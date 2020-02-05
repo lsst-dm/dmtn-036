@@ -16,7 +16,7 @@ That is a major advantage of this approach -- while implementing it efficiently 
 
 \subsection{Derivation and Formalism}
 
-We will start by rewriting the explicit sums in \prettyref{eq:astrometry-chi2} as matrix products:
+We will start by rewriting the explicit sums in \prettyref{eq:astrometry-chi2} as matrix products (we will focus on the astrometry problem only throughout this appendix):
 
 \begin{align}
     \chi^{2} & = D^T W D
@@ -81,7 +81,7 @@ which yields the equivalent of \prettyref{eq:gradient_equation} in the new notat
     J^T\!J \delta\theta = -J^T\!z. \label{eq:vp_gradient_equation}
 \end{align}
 
-To proceed, we now have to specify an order for the parameter vector $\theta$ (and columns of $J$):
+To proceed, we now have to specify an ordering for the elements of the parameter vector $\theta$ (and hence the columns of $J$):
 \begin{itemize}
     \item We start with the positional parameters ($F_i$ in \prettyref{sec:mathematical-formalism}), and, in the future, proper motion and parallax, for each star $i$, in the same order we used for the data.
     For notational consistency (using lowercase Greek symbols for free parameters), we will call a segment of $\delta\theta$ for these parameters $\mu_i$ and their concatenation $\mu$.
@@ -261,6 +261,78 @@ and
 \end{align}
 
 While this makes it seem as though we only need $V_i$ from each QR factorization, note that we will need the full factorization (along with reduced solution $\nu$ for each iteration) to go back and fully solve for the step $\mu_i$ for each \class{FittedStar} as well.
+As discussed below in \prettyref{sec:vp_local_linearity}, $A_i$ should be approximately constant across iterations, so we should actually be able to compute the per-star QR factorizations once up front.
+
+\subsection{Utilizing Local Linearity}
+\label{sec:vp_local_linearity}
+
+The residual vectors $D_i$ have the form
+\begin{align}
+    D_i &= \left[
+        \begin{array}{ c }
+            M_1\left(\nu, S_{1,i}\right) - P_1\left(\mu_i\right) \\
+            M_2\left(\nu, S_{2,i}\right) - P_2\left(\mu_i\right) \\
+            \vdots \\
+            M_{\gamma}\left(\nu, S_{\gamma,i}\right) - P_{\gamma}\left(\mu_i\right) \\
+            P\left(\mu_i\right) - P\left(R_i\right)
+        \end{array}
+    \right],
+\end{align}
+using the same definitions for $M_{\gamma,i}$, $S_{\gamma,i}$, $P_{\gamma}$, $P$, and $R_i$ as in \prettyref{subsec:Definitions}, but using $\mu_i$ instead of $F_i$ for the position parameters as in the rest of this appendix, and making the dependence of $M_{\gamma,i}$ on $\nu$ explicit.
+The last row is present only if we have a reference-catalog match for star $i$.
+
+The corresponding matrix of weights $W_i$ is actually also derived from uncertainties originally measured either in pixel coordinates (and hence transformed by $M_{\gamma,i}$ as well) or, for reference positions, in celestial coordinates.\footnote{Reference catalogs may actually report uncertainties in a local per-object tangent plane, but the distinction is irrelevant for the primary purpose of this discussion.}
+Using $C_{\gamma,i}$ as the $2\times 2$ uncertainty covariance matrix for measurement $S_{\gamma,i}$ and $C_{i}$ for the reference star uncertainty covariance matrix (also $2\times 2$), then:
+\begin{align}
+    W_i^{-1} &= \left[
+        \begin{array}{ c c c c c }
+            \nabla\!_S M_{1, i}^T C_{1,i} \nabla\!_S M_{1, i} & 0 & 0 & 0 & 0 \\
+            0 & \nabla\!_S M_{2, i}^T C_{2,i} \nabla\!_S M_{2, i} & 0 & 0 & 0 \\
+            0 & 0 & \ddots & 0 & 0 \\
+            0 & 0 & 0 & \nabla\!_S M_{\gamma, i}^T C_{\gamma,i} \nabla\!_S M_{\gamma, i} & 0 \\
+            0 & 0 & 0 & 0 & \nabla\!_R P^T C_{\gamma,i} \nabla\!_R P
+        \end{array}
+    \right]
+\end{align}
+where $\nabla\!_S M_{\gamma,i}$ is the $2\times 2$ derivative of $M$ with respect to the input pixel position $S_{\gamma,i}$, not the model parameters $\nu$, and $\nabla\!_R P$ is the derivative of the projection $P$ with respect to the input celestial position (again, also $2\times 2$.
+$W_i$ thus has no dependence on $\mu_i$, so the derivative matrix $A_i$ of $z_i = W_i^{1/2} D_i$ with respect to $\mu_i$ is
+\begin{align}
+    A_i &= \frac{\partial z_i}{\partial \mu_i} = W_i^{1/2}\frac{\partial D_i}{\partial \mu_i} \\
+        &= W_i^{1/2}\left[
+            \begin{array}{ c }
+                - \nabla\!_{\mu} P_1\left(\mu_i\right) \\
+                - \nabla\!_{\mu} P_2\left(\mu_i\right) \\
+                \vdots \\
+                - \nabla\!_{\mu} P_{\gamma}\left(\mu_i\right) \\
+                \nabla\!_{\mu} P\left(\mu_i\right)
+            \end{array}
+        \right]
+\end{align}
+
+Both $M_{\gamma,i}$ and the projections $P_i$ and $P$ represent coordinate transformations that we expect to be locally linear: as long as we evaluate them in the neighborhood of a local point, their second derivative is approximately zero and hence their first derivative is approximately constant (in fact, if this was ever not true of an astronomical coordinate system, we would not be able to represent the action of the point-spread function on it as a convolution, so we would have much bigger problems than just fitting astrometric and photometric calibrations).
+Because the $A_i$ matrices contain only the derivatives of these mappings, and not the mappings themselves, then, we should be able to consider them constant for the duration of the fit, and compute their QR decompositions only once, up front.
+
+The same is not quite true of $B_i$, which has the form
+\begin{align}
+    B_i &= \frac{\partial z_i}{\partial \nu} \\
+        &= \frac{\partial W_i^{1/2}}{\partial \nu} D_i + W_i^{1/2}\frac{\partial D_i}{\partial \nu}
+\end{align}
+Propagating that derivative through the matrix square root would be unpleasant, to say the least, but again we can take advantage of local linearity to avoid this: for any plausible $\nu$, we know that $M_{\gamma,i}$ should be locally linear, and hence $\nabla\!_{\nu}\nabla\!_S M_{\gamma, i}^T C_{\gamma,i}\approx 0$.
+We can then approximate $B_i$ as
+\begin{align}
+    B_i &\approx W_i^{1/2}\frac{\partial D_i}{\partial \nu} \\
+        &= W_i^{1/2}\left[
+            \begin{array}{ c }
+                \nabla\!_{\nu} M_1\left(\nu, S_{1,i}\right) \\
+                \nabla\!_{\nu} M_2\left(\nu, S_{2,i}\right) \\
+                \vdots \\
+                \nabla\!_{\nu} M_{\gamma}\left(\nu, S_{\gamma,i}\right) \\
+                0
+            \end{array}
+        \right]
+\end{align}
+I strongly suspect that jointcal already makes this approximation, but I also suspect that jointcal currently recomputes $W_i$ and hence $W_i^{1/2}$ at every iteration even though it should be safe to consider it constant throughout the fit.
+Of course, even if it does, it's a negligible part of the compute budget, at least at present.
 
 \subsection{Implementation Concerns}
 
