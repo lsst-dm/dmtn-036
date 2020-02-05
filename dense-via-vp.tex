@@ -3,7 +3,8 @@
 \subsection{Motivation}
 
 Profiling reveals that for large numbers of visits or objects, jointcal computational performance scales extremely poorly, and is completely dominated by the Cholesky factorization and rank-update steps that we delegate to \texttt{CHOLMOD}.
-While there may be some opportunity to gain a $<2\times$ speedup by improving the outlier rejection logic and hence requesting fewer rank updates, the fact that most of the time is going into routines we do not control (and moreover are the \emph{only} third-party implementation of this algorithm that meets our needs) suggests that the only way to acceptable jointcal computational performance is to replace the sparse Cholesky factorization with something else.
+While there may be some opportunity to increase performance by improving the outlier rejection logic and hence requesting fewer rank updates, the fact that most of the time is going into routines we do not control (and moreover are the \emph{only} third-party implementation of this algorithm that meets our needs) suggests that the only way to acceptable jointcal computational performance is to replace the sparse Cholesky factorization with something else.
+While the total time spent in full factorizations ($\sim 30\%$ at the largest scales we tested) is subdominant to the total time spend in rank updates, the number of outliers grows only linearly with the number of objects, and the time spent in full factorizations seems to be scaling poorly enough on its own to be problematic for LSST (and is already problematic for the HSC deep fields).
 
 Because Cholesky is generally the fastest \emph{direct} factorization method for symmetric matrices, the other obvious solution in the realm of sparse linear algebra would be to switch to an approximate factorization, such as preconditioned conjugate gradient (PCG).
 Utilizing a PCG solver effectively for nonlinear optimization would represent a major change to the jointcal algorithm, however, as one needs to accept the fact that initial steps can be poor early (due to the approximate nature of the solution), and that this is an acceptable tradeoff for the speed of the factorization, while more accuracy is needed for later steps.
@@ -11,8 +12,10 @@ The need to identify an effective preconditioner adds another element of tuning 
 
 The alternative proposed here is to switch away from sparse matrices entirely, by ordering the Hessian matrix $H$ such that the vast majority of it is block diagonal.
 This allows it to be reduced via a series of small dense subproblems (one per \class{FittedStar}) to yield a moderate-size dense matrix (with dimensionality the number of non-star parameters) that must be factored each iteration.
-This is a variant of the Variable Projection algorithm of \citet{1973SJNA...10..413G}, but I will derive it directly from the jointcal astrometry objective function \prettyref{eq:astrometry-chi2} to ensure it is strictly equivalent to the sparse solution.
+This is a variant of the Variable Projection algorithm of \citet{1973SJNA...10..413G}, but I will derive it directly from the jointcal astrometry objective function \prettyref{eq:astrometry-chi2} to ensure the slight differences to the sparse solution are apparent.
 That is a major advantage of this approach -- while implementing it efficiently in the code may require some restructuring, it should generate a very similar sequence of steps as the sparse Cholesky approach (with differences only due to floating-point round-off error and the use of line search).
+
+I also believe this method is closely related to that used in the current version of the code described in \citet{2017PASP..129g4503B}, though that may not have been the case in the version described in that paper.
 
 \subsection{Derivation and Formalism}
 
