@@ -1,0 +1,449 @@
+\section{Converting from sparse to dense via Variable Projection}
+
+\subsection{Motivation}
+
+Profiling reveals that for large numbers of visits or objects, jointcal computational performance scales extremely poorly, and is completely dominated by the Cholesky factorization and rank-update steps that we delegate to \texttt{CHOLMOD}.
+While there may be some opportunity to increase performance by improving the outlier rejection logic and hence requesting fewer rank updates, the fact that most of the time is going into routines we do not control (and moreover are the \emph{only} third-party implementation of this algorithm that meets our needs) suggests that the only way to acceptable jointcal computational performance is to replace the sparse Cholesky factorization with something else.
+While the total time spent in full factorizations ($\sim 30\%$ at the largest scales we tested) is subdominant to the total time spend in rank updates, the number of outliers grows only linearly with the number of objects, and the time spent in full factorizations seems to be scaling poorly enough on its own to be problematic for LSST (and is already problematic for the HSC deep fields).
+
+Because Cholesky is generally the fastest \emph{direct} factorization method for symmetric matrices, the other obvious solution in the realm of sparse linear algebra would be to switch to an approximate factorization, such as preconditioned conjugate gradient (PCG).
+Utilizing a PCG solver effectively for nonlinear optimization would represent a major change to the jointcal algorithm, however, as one needs to accept the fact that initial steps can be poor early (due to the approximate nature of the solution), and that this is an acceptable tradeoff for the speed of the factorization, while more accuracy is needed for later steps.
+The need to identify an effective preconditioner adds another element of tuning and ``black magic`` to these algorithms, and while there is significant prior art using PCG solvers on this kind of problem, adopting that approach would be a larger change to jointcal than we'd ideally like to make.
+
+The alternative proposed here is to switch away from sparse matrices entirely, by ordering the Hessian matrix $H$ such that the vast majority of it is block diagonal.
+This allows it to be reduced via a series of small dense subproblems (one per \class{FittedStar}) to yield a moderate-size dense matrix (with dimensionality the number of non-star parameters) that must be factored each iteration.
+This is a variant of the Variable Projection algorithm of \citet{1973SJNA...10..413G}, but I will derive it directly from the jointcal astrometry objective function \prettyref{eq:astrometry-chi2} to ensure the slight differences to the sparse solution are apparent.
+That is a major advantage of this approach -- while implementing it efficiently in the code may require some restructuring, it should generate a very similar sequence of steps as the sparse Cholesky approach (with differences only due to floating-point round-off error and the use of line search).
+
+I also believe this method is closely related to that used in the current version of the code described in \citet{2017PASP..129g4503B}, though that may not have been the case in the version described in that paper.
+
+\subsection{Derivation and Formalism}
+
+We will start by rewriting the explicit sums in \prettyref{eq:astrometry-chi2} as matrix products (we will focus on the astrometry problem only throughout this appendix):
+
+\begin{align}
+    \chi^{2} & = D^T W D
+\end{align}
+
+with
+
+\begin{align}
+    D & \equiv \left[
+        \begin{array}{ c }
+            D_1 \\
+            D_2 \\
+            \vdots \\
+            D_i
+        \end{array}
+    \right] \\
+    W & \equiv \left[
+        \begin{array}{ c c c c }
+               W_1 & 0 & 0 & 0 \\
+            0 &    W_2 & 0 & 0 \\
+            0 & 0 & \ddots & 0 \\
+            0 & 0 & 0 &    W_i
+        \end{array}
+    \right],
+\end{align}
+
+where each block $D_i$ or $W_i$ corresponds to the residual terms or weights (respectively) for one \class{FittedStar} (including both \class{MeasuredStar} and \class{RefStar} terms, as appropriate).
+They thus have the same \emph{content} as the $D$ and $W$ symbols introduced in \prettyref{sec:mathematical-formalism}, but different indexing notation and ordering of elements (the ordering is unspecified and unimportant in \prettyref{sec:mathematical-formalism}; here it is quite important).
+Note that the dimensionality of these blocks are not the same for all $i$ -- the size of the block for \class{FittedStar} $i$ is set by the number of data points (including reference positions) for that star.
+
+As in the earlier derivation, we recognize that $W$ (and each of its blocks $W_i$) is positive definite, and hence has a square root.
+We then define
+\begin{align}
+    z \equiv W^{1/2}D
+\end{align}
+and
+\begin{align}
+    z_i \equiv W_i^{1/2}D_i
+\end{align}
+to further simplify the $\chi^2$ to just
+\begin{align}
+    \chi^{2} & = z^Tz .
+\end{align}
+
+Using this notation, we will now re-derive the solution for a minimization step (analogous to \prettyref{eq:gradient_equation}).
+We start with the second-order Taylor expansion of $\chi^2$, again using $\theta$ as the full vector of free parameters and neglecting the second derivatives of the residuals themselves:
+\begin{align}
+    \chi^2 &\approx z^Tz + 2z^T J\delta\theta
+    + \delta\theta^T J^T\!J \delta\theta
+\end{align}
+with
+\begin{align}
+    J &\equiv \nabla z.
+\end{align}
+As with the other symbols, $J$ has the same content as the $J$ from \prettyref{sec:mathematical-formalism}, but with different indexing and the order of its rows more explicit.
+We wish to zero the derivative of this expansion with respect to $\delta\theta$:
+\begin{align}
+    \nabla\chi^2 &\approx 2J^T\!z + 2J^T\!J \delta\theta = 0
+\end{align}
+which yields the equivalent of \prettyref{eq:gradient_equation} in the new notation:
+\begin{align}
+    J^T\!J \delta\theta = -J^T\!z. \label{eq:vp_gradient_equation}
+\end{align}
+
+To proceed, we now have to specify an ordering for the elements of the parameter vector $\theta$ (and hence the columns of $J$):
+\begin{itemize}
+    \item We start with the positional parameters ($F_i$ in \prettyref{sec:mathematical-formalism}), and, in the future, proper motion and parallax, for each star $i$, in the same order we used for the data.
+    For notational consistency (using lowercase Greek symbols for free parameters), we will call a segment of $\delta\theta$ for these parameters $\mu_i$ and their concatenation $\mu$.
+    \item We finish with all other parameters that are not per-star, using $\nu$ for that segment of $\delta\theta$.
+\end{itemize}
+
+These bullets can be expressed as in block-matrix form as
+\begin{align}
+    \delta\theta &= \left[
+        \begin{array}{ c }
+            \mu \\
+            \nu
+        \end{array}
+    \right]
+    =
+    \left[
+        \begin{array}{ c }
+            \mu_1 \\
+            \mu_2 \\
+            \vdots \\
+            \mu_i \\
+            \nu
+        \end{array}
+    \right],
+\end{align}
+and the block form of $J$ is then
+\begin{align}
+    J &= \left[
+        \begin{array}{ c c }
+            A & B
+        \end{array}
+    \right]
+    = \left[
+        \begin{array}{ c c c c c }
+            A_1 & 0 & 0 & 0 & B_1 \\
+            0 & A_2 & 0 & 0 & B_2 \\
+            0 & 0 & \ddots & 0 & \vdots \\
+            0 & 0 & 0 & A_i & B_i
+        \end{array}
+    \right],
+\end{align}
+where
+\begin{align}
+    A_i &\equiv \nabla_{\mu_i} z_i \\
+    B_i &\equiv \nabla_{\nu} z_i.
+\end{align}
+The block-diagonal structure of $A$ is what makes this method practical; it comes about because the derivative of the residuals for one star with respect to the parameters of some other star is zero.
+Note that the total number of columns in $A$ (typically $\sim 10^5$) is much larger than the number of columns in $B$ ($\sim 10^3$), but the number of columns in a particular $A_i$ (only 2, or perhaps 5 if stellar motion is being fit) is much smaller than the number of columns in a particular $B_i$ (which is the same for all $B_i$, and the same as the full $B$: $\sim 10^3$).
+
+Using the compressed block form, we can expand \prettyref{eq:vp_gradient_equation} as
+\begin{align}
+    \left[
+        \begin{array}{ c }
+            A^T \\
+            B^T
+        \end{array}
+    \right]
+    \left[
+        \begin{array}{ c c }
+            A & B
+        \end{array}
+    \right]
+    \left[
+        \begin{array}{ c }
+            \mu \\
+            \nu
+        \end{array}
+    \right]
+    &=
+    -\left[
+        \begin{array}{ c }
+            A^T z \\
+            B^T z
+        \end{array}
+    \right] \\
+    A^T A \mu + A^T B \nu &= -A^T z \\
+    B^T A \mu + B^T B \nu &= -B^T z
+\end{align}
+while the expanded version of this system of matrix equations is
+\begin{align}
+    A_i^T A_i \mu_i + A_i^T B_i \nu &= -A_i^T z_i \label{eq:vp_star_subproblem} \\
+    \sum_i B_i^T A_i \mu_i + \left[\sum_i B_i^T B_i\right]\nu &= -\sum_i B_i^T z_i \label{eq:vp_reduced_problem}
+\end{align}
+This is enough to see the outlines of the algorithm:
+\begin{itemize}
+    \item for each \class{FittedStar} $i$, solve \prettyref{eq:vp_star_subproblem} for $\mu_i$ \emph{as a function of $\nu$};
+    \item substitute the results into \prettyref{eq:vp_reduced_problem} and solve that for $\nu$;
+    \item use $\nu$ to fully evaluate each $\mu_i$.
+\end{itemize}
+The per-\class{FittedStar} subproblems are tiny and dense, while the reduced final problem should usually be small enough that a dense factorization is probably more efficient than a sparse one (especially if using a dense solver makes a parallel algorithm available).
+
+\subsection{Simplification via QR Factorization}
+
+The algorithm derived in the last section is the bulk of this proposal, and it should work regardless of the details of the factorization used to solve the subproblems or the reduced problem.
+Using a QR factorization of each $A_i$ in the subproblems \prettyref{eq:vp_star_subproblem} simplifies the linear algebra involved in substituting $\mu_i$ back into \prettyref{eq:vp_reduced_problem}, however, so working through that approach seems worthwhile.
+It is quite likely that other factorizations would yield something similar.
+
+We write the column-pivoted QR factorization of $A_i$ as
+\begin{align}
+    A_i &= \left[
+        \begin{array}{ c c }
+            U_i & V_i
+        \end{array}
+    \right]
+    \left[
+        \begin{array}{ c }
+            R_i \\
+            0
+        \end{array}
+    \right]
+    P_i^T \\
+    &= U_i R_i P_i^T ,
+    \label{eq:vp_star_qr}
+\end{align}
+where $U_i$ and $V_i$ are blocks in an orthogonal matrix:
+\begin{align}
+    \left[
+        \begin{array}{ c c }
+            U_i & V_i
+        \end{array}
+    \right]
+    \left[
+        \begin{array}{ c }
+            U_i^T \\
+            V_i^T
+        \end{array}
+    \right]
+    &=
+    \left[
+        \begin{array}{ c }
+            U_i^T \\
+            V_i^T
+        \end{array}
+    \right]
+    \left[
+        \begin{array}{ c c }
+            U_i & V_i
+        \end{array}
+    \right]
+    = I,
+\end{align}
+$R_i$ is upper triangular, and $P_i$ is a permutation matrix ($R$ and $P$ are \emph{not} related to those defined in \prettyref{subsec:Definitions}; we're just running out of symbols).
+
+Rearranging \prettyref{eq:vp_star_subproblem} and substituting this yields
+\begin{align}
+    P_i R_i^T R_i P_i^T \mu_i &= -P_i R_i^T U_i^T \left(z_i + B_i\nu\right) \label{eq:vp_star_subproblem_qr_1}
+\end{align}
+
+Noting that $\mu_i$ only appears in \prettyref{eq:vp_reduced_problem} as $A_i\mu_i$, we can multiply \prettyref{eq:vp_star_subproblem_qr_1} on the left by $U_i R_i^{-T} P_i^T$ to obtain
+\begin{align}
+    U_i R_i P_i^T \mu_i &= -U_i U_i^T \left(z_i + B_i\nu\right) \\
+    A_i \mu_i &= -U_i U_i^T \left(z_i + B_i\nu\right) \label{eq:vp_star_subproblem_qr_2}
+\end{align}
+which we can then insert back into \prettyref{eq:vp_reduced_problem}
+\begin{align}
+    -\sum_i B_i^T U_i U_i^T \left(z_i + B_i\nu\right) + \left[\sum_i B_i^T B_i\right]\nu &= -\sum_i B_i^T z_i
+\end{align}
+and rearrange to obtain
+\begin{align}
+    \left[\sum_i B_i^T \left(I - U_i U_i^T\right) B_i\right]\nu &=
+        -\sum_i B_i^T \left(I - U_i U_i^T\right) z_i \\
+    \left[\sum_i B_i^T V_i V_i^T B_i\right]\nu &=
+        -\sum_i B_i^T V_i V_i^T z_i \\
+    H\nu &= -g.
+\end{align}
+We can use this to accumulate the reduced Hessian $H$ and gradient $g$ from their per-star contributions, factor $H$ using the solver of our choice (dense $LDL^T$ seems reasonable), and solve for $\nu$ at every iteration.
+For clarity below, it is useful to define symbols for the contibutions $H_i$ and $g_i$ from star $i$ to $H$ and $g$ (respectively):
+\begin{align}
+    H_i &\equiv B_i^T V_i V_i^T B_i = K_i^T K_i \\
+    g_i &\equiv B_i^T V_i V_i^T z_i = K_i^T r_i
+\end{align}
+and
+\begin{align}
+    K_i &\equiv V_i^T B_i \\
+    r_i &\equiv V_i^T z
+\end{align}
+
+While this makes it seem as though we only need $V_i$ from each QR factorization, note that we will need the full factorization (along with reduced solution $\nu$ for each iteration) to go back and fully solve for the step $\mu_i$ for each \class{FittedStar} as well.
+As discussed below in \prettyref{subsec:vp_local_linearity}, $A_i$ should be approximately constant across iterations, so we should actually be able to compute the per-star QR factorizations once up front.
+
+\subsection{Implementation Concerns}
+
+\subsubsection{Minimizing Refactoring}
+
+I believe jointcal already has routines that evaluate the model derivatives $J$ in the form of a sequence of \texttt{Eigen::Triplet} objects.
+If so, these should contain all of the elements of $A_i$ and $B_i$ we need, and the easiest way to migrate to this algorithm would be to instead utilize those triplets to build those blocks as dense matrices instead.
+If the ordering of rows (measurements) is already consistent with that required by this approach (or can easily be made consistent by manipulating the index-calculation code), that could be done by forming the full $J$ as a sparse matrix and using Eigen block-slicing to obtain $A_i$ and $B_i$ from it.
+
+This may rule out or weaken some of the potential optimizations described in \prettyref{sec:vp_further_optimization}, but as those mostly correspond to operations that are currently negligible in the compute budget, that's a reasonable starting point.
+If this minimal modification proves promising, but we're still not happy with the overall performance, we can then consider refactoring the model- and derivative-evaluation code.
+
+\subsubsection{Line Searches}
+
+The theoretical (but not numerical) equivalence between this approach and a direct sparse solution to the full problem breaks down if we use a line search to adjust the step size after computing the Gauss-Newton step $\delta\theta$, unless we apply the same scaling factor to both $\mu_i$ and $\nu$.
+That would entail a new factorization of $H$ at every test point in the line search and break the simplified formula for $H$ we obtained by using QR factorization.
+That makes it almost certainly a bad idea -- it would be much better to simply always accept the full step for $\mu_i$, and if necessary perform a line search on $\nu$ only.
+This makes sense algorithmically, too -- we would essentially be assuming that our model positions for stars are always very close to the final solution, even if we are not as confident that we are close to the final solution for other parameters.
+
+\subsubsection{Outlier Rejection}
+
+Updating the reduced $H$ and $g$ to reflect the removal of some \class{FittedStar}s as outliers is straightforward -- one can simply subtract in the terms in the sums that correspond to those stars.
+If we end up spending most of our time accumulating $H$ rather than factoring it, an outlier rejection approach much like the current one may still be viable.
+If not, we will need to make other changes; I don't think a rank-update approach of the type we had in the sparse system is possible.
+
+An obvious mitigation would be to work on reducing the number of outliers we need to reject (by better filtering the input catalogs or adding motion parameters); another would be deferring/bundling outliers to reduce the number of factorizations.
+In the latter category, we should certainly consider simply rejecting a group of outliers once (perhaps more agressively) every step, and then just factoring the reduced matrix and computing the next step, instead of iterating to reject multiple groups of outliers every step.
+
+\subsubsection{Using Eigen}
+
+\texttt{Eigen::ColPivHousehoulderQR} computes exactly the QR factorization in \prettyref{eq:vp_star_qr}.
+I suspect there is some way to use its \texttt{householderQ} method to form matrix products with $V_i$ more efficiently than it would be to use the \texttt{matrixQ} method and perform a direct matrix multiplication, but I'm not certain, and it's probably not worth worrying about unless a profile shows those matrix products to be hotspots.
+I have not tried to work out exactly how best to solve for for $\mu_i$ given that factorization and $\nu$; ideally we'd express that via a call to the \texttt{solve} method, but we may need to use other terms in the factorization to compute the appropriate right-hand-side vector for that.
+
+\subsection{Further Optimization}
+\label{sec:vp_further_optimization}
+
+\subsubsection{Utilizing Local Linearity}
+\label{subsec:vp_local_linearity}
+
+The residual vectors $D_i$ have the form
+\begin{align}
+    D_i &= \left[
+        \begin{array}{ c }
+            M_1\left(\nu, S_{1,i}\right) - P_1\left(\mu_i\right) \\
+            M_2\left(\nu, S_{2,i}\right) - P_2\left(\mu_i\right) \\
+            \vdots \\
+            M_{\gamma}\left(\nu, S_{\gamma,i}\right) - P_{\gamma}\left(\mu_i\right) \\
+            P\left(\mu_i\right) - P\left(R_i\right)
+        \end{array}
+    \right],
+\end{align}
+using the same definitions for $M_{\gamma,i}$, $S_{\gamma,i}$, $P_{\gamma}$, $P$, and $R_i$ as in \prettyref{subsec:Definitions}, but using $\mu_i$ instead of $F_i$ for the position parameters (as in the rest of this appendix), and making the dependence of $M_{\gamma,i}$ on $\nu$ explicit.
+The last row is present only if we have a reference-catalog match for star $i$.
+
+The corresponding matrix of weights $W_i$ is actually also derived from uncertainties originally measured either in pixel coordinates (and hence transformed by $M_{\gamma,i}$ as well) or, for reference positions, in celestial coordinates.\footnote{Reference catalogs may actually report uncertainties in a local per-object tangent plane, but the distinction is irrelevant for the primary purpose of this discussion.}
+Using $C_{\gamma,i}$ as the $2\times 2$ uncertainty covariance matrix for measurement $S_{\gamma,i}$ and $C_{i}$ for the reference star uncertainty covariance matrix (also $2\times 2$), then:
+\begin{align}
+    W_i^{-1} &= \left[
+        \begin{array}{ c c c c c }
+            \nabla\!_S M_{1, i}^T C_{1,i} \nabla\!_S M_{1, i} & 0 & 0 & 0 & 0 \\
+            0 & \nabla\!_S M_{2, i}^T C_{2,i} \nabla\!_S M_{2, i} & 0 & 0 & 0 \\
+            0 & 0 & \ddots & 0 & 0 \\
+            0 & 0 & 0 & \nabla\!_S M_{\gamma, i}^T C_{\gamma,i} \nabla\!_S M_{\gamma, i} & 0 \\
+            0 & 0 & 0 & 0 & \nabla\!_R P^T C_{\gamma,i} \nabla\!_R P
+        \end{array}
+    \right]
+\end{align}
+where $\nabla\!_S M_{\gamma,i}$ is the $2\times 2$ derivative of $M$ with respect to the input pixel position $S_{\gamma,i}$, not the model parameters $\nu$, and $\nabla\!_R P$ is the derivative of the projection $P$ with respect to the input celestial position (again, also $2\times 2$).
+$W_i$ thus has no dependence on $\mu_i$, so the derivative matrix $A_i$ of $z_i = W_i^{1/2} D_i$ with respect to $\mu_i$ is
+\begin{align}
+    A_i &= \nabla\!_{\mu} z_i = W_i^{1/2} \, \nabla\!_{\mu} D_i
+        = W_i^{1/2}\left[
+            \begin{array}{ c }
+                - \nabla\!_{\mu} P_1\left(\mu_i\right) \\
+                - \nabla\!_{\mu} P_2\left(\mu_i\right) \\
+                \vdots \\
+                - \nabla\!_{\mu} P_{\gamma}\left(\mu_i\right) \\
+                \nabla\!_{\mu} P\left(\mu_i\right)
+            \end{array}
+        \right]
+\end{align}
+
+Both $M_{\gamma,i}$ and the projections $P_i$ and $P$ represent coordinate transformations that we expect to be locally linear: as long as we evaluate them in the neighborhood of a local point, their second derivative is approximately zero and hence their first derivative is approximately constant (in fact, if this was ever not true of an astronomical coordinate system, we would not be able to represent the action of the point-spread function on it as a convolution, so we would have much bigger problems than just fitting astrometric and photometric calibrations).
+Because the $A_i$ matrices contain only the derivatives of these mappings, and not the mappings themselves, then, we should be able to consider them constant for the duration of the fit, and compute their QR decompositions only once, up front.
+This should continue to be true when $\mu_i$ and the columns of $A_i$ are extended to include motion parameters.
+
+The same is not quite true of $B_i$, which has the form
+\begin{align}
+    B_i &= \nabla\!_{\nu} z_i
+        = \nabla\!_{\nu} W_i^{1/2} \, D_i + W_i^{1/2} \, \nabla\!_{\nu} D_i
+\end{align}
+Propagating that derivative through the matrix square root would be unpleasant, to say the least, but again we can take advantage of local linearity to avoid this: for any plausible $\nu$, we know that $M_{\gamma,i}$ should be locally linear, and hence $\nabla\!_{\nu}\nabla\!_S M_{\gamma, i} \approx 0$.
+We can then approximate $B_i$ as
+\begin{align}
+    B_i &\approx W_i^{1/2} \, \nabla\!_{\nu} D_i
+        = W_i^{1/2}\left[
+            \begin{array}{ c }
+                \nabla\!_{\nu} M_1\left(\nu, S_{1,i}\right) \\
+                \nabla\!_{\nu} M_2\left(\nu, S_{2,i}\right) \\
+                \vdots \\
+                \nabla\!_{\nu} M_{\gamma}\left(\nu, S_{\gamma,i}\right) \\
+                0
+            \end{array}
+        \right]
+\end{align}
+I strongly suspect that jointcal already makes this approximation, but I also suspect that jointcal currently recomputes $W_i$ and hence $W_i^{1/2}$ at every iteration even though it should be safe to consider it constant throughout the fit.
+Of course, even if it does, it's a negligible part of the compute budget at present.
+
+\subsubsection{Sparsity}
+\label{subsec:vp_sparsity}
+
+While the rows of each $B_i$ correspond only to the measurements of \class{FittedStar} $i$, the columns correspond to all non-star parameters, even those associated with model terms (visits or CCDs) that do not have a measurement for that star, and hence some will be entirely zero.
+When the full set of input observations is is wide enough to cover many focal planes (or there are more global parameters than per-visit parameters), each $B_i$ could thus have many zero-valued columns and its contribution $H_i$ will be even more sparse.
+It may make sense to explicitly account for this in the accumulation of $H$ and $g$ and/or the final solutions for $\mu_i$.
+
+The first step -- and probably the only one worth considering for now -- would be to store each $B_i$ as a sequence of matrix blocks (each corresponding to the parameters of one or more visits or CCDs relevant for star $i$) and their column offsets into the larger matrix, with each block having the same row extent (corresponding to the measurements and reference positions for $i$).
+The product $K_i \equiv V_i^T B_i$ could be stored in the same way (it has the same columns, but different rows), and computed as the standard dense matrix product of $V_i^T$ with each block of $B_i$.
+For example, if some $B_i$ has the block form:
+\begin{align}
+    B_i &= \left[
+        \begin{array}{ c c c c c c }
+            B_i^{(1)} & B_i^{(2)} & 0 & 0 & B_i^{(5)} & 0
+        \end{array}
+    \right]
+\end{align}
+then $K_i$ has the same form (with $K_i^{(j)} \equiv V_i^T B_i^{(j)}$):
+\begin{align}
+    K_i &= \left[
+        \begin{array}{ c c c c c c }
+            K_i^{(1)} & K_i^{(2)} & 0 & 0 & K_i^{(5)} & 0
+        \end{array}
+    \right],
+\end{align}
+and we would store only $K_i^{(1)}$, $K_i^{(2)}$, and $K_i^{(5)}$ and their column offsets (note that the superscript indices here are not meaningful; these blocks may represent visits, CCDs, or groups thereof).
+
+Accumulating $H$ from this data structure would involve computing the inner product of all combinations of $K_i$ blocks and adding the results to the blocks of $H$ that correspond to their offsets; using the same example as above, the contribution $H_i$ from that \class{FittedStar} would look like:
+\begin{align}
+    H_i &= \left[
+        \begin{array}{ c c c c c c }
+            K_i^{(1) T} K_i^{(1)} & K_i^{(1) T} K_i^{(2)} & 0 & 0 & K_i^{(1) T} K_i^{(5)} & 0 \\
+            K_i^{(2) T} K_i^{(1)} & K_i^{(2) T} K_i^{(2)} & 0 & 0 & K_i^{(2) T} K_i^{(5)} & 0 \\
+            0 & 0 & 0 & 0 & 0 & 0 \\
+            0 & 0 & 0 & 0 & 0 & 0 \\
+            K_i^{(5) T} K_i^{(1)} & K_i^{(5) T} K_i^{(2)} & 0 & 0 & K_i^{(5) T} K_i^{(5)} & 0 \\
+            0 & 0 & 0 & 0 & 0 & 0
+        \end{array}
+    \right].
+\end{align}
+
+Accumulating $g$ would similarly involve computing the matrix-vector product of each block with $r_i = V_i^T z_i$ and adding the results to the appropriate segments of $g$:
+\begin{align}
+    g_i &= \left[
+        \begin{array}{ c }
+            K_i^{(1) T} r_i \\
+            K_i^{(2) T} r_i \\
+            0 \\
+            0 \\
+            K_i^{(5) T} r_i \\
+            0
+        \end{array}
+    \right].
+\end{align}
+We do not expect $r_i$ to have many zero elements, so no special storage will be useful there.
+
+Note that while each $H_i$ is sparse, the full $H$ will not be, at least in our current mode of operation (per-tract, with tracts approximately the scale of a visit).
+If that changes, we could instead accumulate into a sparse matrix and again use a sparse solver (but still on a much smaller-scale problem, albeit one with a larger fill factor).
+
+If we ever have many more global parameters than per-visit parameters (e.g. by fitting the optical distortion as a constant, and the per-visit atmospheric contribution is lower-order), it may be worth trying to the same approach again, by solving per-visit subproblems and accumulating those to form a fully-reduced Hessian containing only the global parameters.
+I have not attempted to derive this extension, and am by no means certain that it is even viable (it depends on whether the partially-reduced Hessian $H$ derived above also has a block structure we can take advantage of).
+I would certainly try a sparse solver on $H$ first.
+
+\subsubsection{Parallelization}
+
+One potential advantage of switching to dense solvers is that we're much more likely to be able to find a parallel implementation.
+The per-star subproblems are also completely independent, and could be run in parallel as well (if we can get OpenMP working at all with our build system and dependencies).
+
+This is potentially extremely valuable: there are many fewer invocations of jointcal (i.e. one per tract) than most other pipeline steps, so we should always have plenty of cores to throw at it if it can make use of them.
+
+I would not advocate trying to add multithreading at the same time we switch to this new approach to solving the linear algebra, but it would be worth keeping in mind when restructuring the code (e.g. by making the inputs and outputs of each per-\class{FittedStar} subproblem routine explicit as arguments or return values, rather than utilizing class data members that might be dangerous to share across threads).
+
+It's also worth noting that while Eigen can be configured to use OpenMP, this is a compile-time option, and I don't think it's something we could turn on in Jointcal only without a lot of build-system cleverness and wrapping (we had the same problem with \texttt{meas\_mosaic}).
+Eigen's parallel implementations also aren't nearly as optimized as their single-threaded versions, so if we do want to use a parallel solver for the reduced problem, I'd just look for a different one.
