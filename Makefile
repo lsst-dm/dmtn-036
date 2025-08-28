@@ -19,8 +19,8 @@ $(DOCNAME).pdf: $(tex) meta.tex local.bib authors.tex
 	bibtex  $(DOCNAME)
 	xelatex  $(DOCNAME).tex
 	xelatex  $(DOCNAME).tex
-	makeglossaries $(DOCNAME)
-	xelatex $(DOCNAME)
+#	makeglossaries $(DOCNAME)
+#	xelatex $(DOCNAME)
 # For glossary uncomment the 2 lines above
 
 authors.tex:  authors.yaml
