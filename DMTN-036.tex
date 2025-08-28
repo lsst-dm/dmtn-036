@@ -88,7 +88,7 @@ The plan of this note is as follows: we first sketch the algorithm
 in \prettyref{sec:mathematical-formalism}, and describe the how we
 evaluate the derivatives with respect to the parameters. We then describe
 how we associate the measurements of each object in different exposures
-in \prettyref{sec:catalog-association}. 
+in \prettyref{sec:catalog-association}.
 
 \section{Past work}
 
@@ -113,7 +113,7 @@ a tangent plane, followed by a gnomonic de-projection to the celestial
 sphere. The difference between formats lies into the encoding of the
 polynomial, but they map exactly the same space of distortion functions.
 
-The algorithm can be roughly split into these successive steps: 
+The algorithm can be roughly split into these successive steps:
 \begin{enumerate}
 \item load the input catalogs and 'rough' WCS's and catalogs, and select
 the sources to use in the fit (e.g. good centroids, unblended, high
@@ -123,7 +123,7 @@ on-sky source, and associate those on-sky sources with a reference
 catalog (if provided).
 \item Iteratively fit the model parameters and ``true'' on-sky values,
 clipping outliers at each iteration.
-\item Output results. 
+\item Output results.
 \end{enumerate}
 
 \section{Mathematical formalism\label{sec:mathematical-formalism}}
@@ -172,7 +172,7 @@ plane; $P_{\gamma}$ is user-defined;
 i.e. the inverse of the 2$\times$2 covariance matrix (for astrometry),
 or the inverse of the transformed instrument-flux error;
 \end{itemize}
-and reference component, 
+and reference component,
 \begin{itemize}
 \item $P$ is some (user-provided) sky to tangent plane projector;
 \item $W_{j}$ is the weight matrix of the reference star, i.e. the inverse
@@ -182,7 +182,7 @@ reference flux error.
 
 \subsection{Least-squares expression}
 
-The fit consists of minimizing, for photometry, 
+The fit consists of minimizing, for photometry,
 \begin{align}
 \chi^{2} & =\sum_{\gamma,i}[M_{\gamma}(S_{\gamma,i})-F_{i}]^{T}W_{\gamma,i}[M_{\gamma}(S_{\gamma,i})-F_{i}] & \textrm{(meas. terms)}\nonumber \\
  & +\sum_{j}[F_{j}-R_{j}]^{T}W_{j}[F_{j}-R_{j}] & \textrm{(ref. terms)}\label{eq:photometry-chi2}
@@ -329,7 +329,7 @@ sparse matrix (the Jacobian),
 \begin{equation}
 J\equiv\left[\{K_{\gamma i},\forall\gamma,i\},\{K_{j},\forall j\}\right]\label{eq:Jacobian}
 \end{equation}
-and thus we simply have 
+and thus we simply have
 \begin{equation}
 \frac{1}{2}\frac{d^{2}\chi^{2}}{d\theta^{2}}=J^{T}J\label{eq:gradient_equation}
 \end{equation}
@@ -371,7 +371,7 @@ be
 \begin{eqnarray}
 M_{\gamma}(\eta,S_{\gamma i}) & = & M_{CCD}(f_{0}^{-1},f_{\gamma i})M_{visit}(a_{j,k},x_{\gamma i},y_{\gamma i})\label{eq:photometry-mapping}\\
  & = & f_{\gamma i}[f_{0}]^{-1}\sum_{j=0}^{j=n}\sum_{k=0}^{k=m}a_{j,k}T_{j}(u_{\gamma i})T_{k}(v_{\gamma i})\nonumber \\
- & = & \phi_{\gamma i}\nonumber 
+ & = & \phi_{\gamma i}\nonumber
 \end{eqnarray}
 where we will fit $f_{0}^{-1}$ instead of $f_{0}$ in order to simplify
 the derivatives (with respect to $\eta=\left(f_{0}^{-1},a_{j,k}\forall j,k\right)$).
@@ -383,7 +383,7 @@ where, for the measurement terms we have (recall eq. \prettyref{eq:photometry_re
 \begin{eqnarray}
 \frac{\partial D_{\gamma i}}{\partial f_{0}^{-1}} & = & f_{\gamma i}M_{visit}(a_{j,k}x_{\gamma i},y_{\gamma i})\label{eq:photometry-derivatives}\\
 \frac{\partial D_{\gamma i}}{\partial a_{j,k}} & = & f_{\gamma i}f_{0}^{-1}T_{jk}(u_{\gamma i},v_{\gamma i})\nonumber \\
-\frac{\partial D_{\gamma i}}{\partial F_{i}} & = & -1\nonumber 
+\frac{\partial D_{\gamma i}}{\partial F_{i}} & = & -1\nonumber
 \end{eqnarray}
 and for the reference terms (recall eq. \prettyref{eq:photometry_residual_vector_reference}),
 \begin{equation}
@@ -411,7 +411,7 @@ the mapping is
 M_{\gamma}(\eta,S_{\gamma i}) & = & m_{\gamma i}+m_{CCD}+m_{visit}\label{eq:magnitude-mapping}\\
  & = & -2.5\log_{10}(M_{CCD}(f_{0}^{-1},f_{\gamma i}))-2.5\log_{10}(M_{visit}(a_{j,k},x_{\gamma i},y_{\gamma i}))\\
  & = & m(f_{\gamma i})+m(f_{0}^{-1})+\sum a_{j,k}T_{j}(u)T_{k}(v)\nonumber \\
- & = & m_{\gamma i}\nonumber 
+ & = & m_{\gamma i}\nonumber
 \end{eqnarray}
 Making the visit component an additive polynomial of position makes
 the derivatives simpler, while adding complexity to the resulting
@@ -427,7 +427,7 @@ where, for the measurement terms we have (recall eq. \prettyref{eq:photometry_re
 \begin{eqnarray}
 \frac{\partial D_{\gamma i}}{\partial f_{0}^{-1}} & = & 1\label{eq:magnitude-derivatives}\\
 \frac{\partial D_{\gamma i}}{\partial a_{j,k}} & = & T_{jk}(u_{\gamma i},v_{\gamma i})\nonumber \\
-\frac{\partial D_{\gamma i}}{\partial F_{i}} & = & -1\nonumber 
+\frac{\partial D_{\gamma i}}{\partial F_{i}} & = & -1\nonumber
 \end{eqnarray}
 and for the reference terms (recall eq. \prettyref{eq:photometry_residual_vector_reference}),
 \begin{equation}
@@ -449,14 +449,14 @@ ways to model the mappings from pixel coordinates to the tangent plane,
 and the actual model should be abstract in the routines accumulating
 gradient and Jacobian. The class \class{AstrometryModel} is an abstract
 class aiming at connecting generically the fitting routines to actual
-models. We have so far coded two of these models: 
+models. We have so far coded two of these models:
 \begin{itemize}
 \item \class{SimplePolyModel} implements one polynomial mapping per input
-\class{CcdImage} (i.e. Calexp). 
+\class{CcdImage} (i.e. Calexp).
 \item \class{ConstrainedPolyModel} implements a model where the mapping
 for each CcdImage is a composition of a polynomial for each CCD and
 a polynomial for each exposure. For one of the exposures, the mapping
-should be fixed or the model is degenerate. 
+should be fixed or the model is degenerate.
 \end{itemize}
 For example, if one fits 10 exposures from a 36-CCD camera, there
 will be $10\times36$ polynomials to fit with the first model, and
@@ -478,7 +478,7 @@ to fitting of polynomials.
 \subsection{Choice of projectors}
 
 In the least squares expression \prettyref{eq:astrometry-chi2}, the
-residuals of the measurement terms read: 
+residuals of the measurement terms read:
 \[
 D_{\gamma i}=M_{\gamma}(S_{\gamma i})-P_{\gamma}(F_{i})
 \]
@@ -528,7 +528,7 @@ or not (see \prettyref{sec:indices_whattofit}).
 The code allows to account for differential chromatic effects of atmospheric
 refraction, i.e. the fact that objects positions in the image plane
 are shifted by atmospheric refraction in a way that depends on their
-color. The shift reads: 
+color. The shift reads:
 \begin{equation}
 \delta S=k_{b}(c-c_{0})\hat{n}\label{eq:refrac_corr}
 \end{equation}
@@ -571,7 +571,7 @@ routine).
 
 Regarding reference terms, the matrix $W_{j}$ should be derived from
 the reference catalog position uncertainty matrix $V_{0}$ (typically
-delivered for $(\alpha,\delta)$ coordinates): 
+delivered for $(\alpha,\delta)$ coordinates):
 \[
 W_{j}=(P'^{T}V_{0}P')^{-1}
 \]
@@ -662,15 +662,15 @@ transient requires mappings between images to transport the common
 position in pixel space from some reference image to any other in
 the series. The calexp series would typically involve the CCD from
 each exposure that covers the region of interest. The package described
-here can fit for the needed mappings: 
+here can fit for the needed mappings:
 \begin{itemize}
 \item in order to remove all reference terms from the $\chi^{2}$ of eq.
-\prettyref{eq:astrometry-chi2}, one avoids calling \method{Associations::CollectRefStars}. 
+\prettyref{eq:astrometry-chi2}, one avoids calling \method{Associations::CollectRefStars}.
 \item One chooses polynomial mappings for all Calexp except, reserving one
 to serve as a reference with a fixed identity mapping. The distortion
-model \class{SimplePolyModel} allows that. 
+model \class{SimplePolyModel} allows that.
 \item Chose identity projectors (the class \class{IdentityProjector} does
-precisely that). 
+precisely that).
 \end{itemize}
 So, fitting transformations between image sets can be done with the
 provided code.
@@ -694,10 +694,10 @@ a very broad scope of applications, and wide-field imaging makes use
 of a very small subset of those.
 
 For the mappings used in wide-field imaging, the transformation from
-pixel space to sky can be pictured in two steps: 
+pixel space to sky can be pictured in two steps:
 \begin{enumerate}
-\item mapping coordinates in pixel space onto a plane. 
-\item de-projecting this plane to the celestial sphere. 
+\item mapping coordinates in pixel space onto a plane.
+\item de-projecting this plane to the celestial sphere.
 \end{enumerate}
 Let us clear up the projection/de-projection step first. There are
 plenty of choices possible here, and the differences only matter fir
@@ -748,7 +748,7 @@ We now detail what is involved in the SIP convention: the SIP ``twisting''
 itself is encoded through 4 polynomials of 2 variables, which encode
 the direct and reverse transformations. The standard affine transform
 is expressed through a $2\times2$ matrix ($Cd$) and a reference
-point $X_{ref}$ (called \verb'CRPIX' in the fits header): 
+point $X_{ref}$ (called \verb'CRPIX' in the fits header):
 \[
 Y_{TP}=Cd(X_{pix}-X_{ref})
 \]
@@ -759,7 +759,7 @@ this frame choice. We write symbolically this transform as $Y_{TP}=L(X_{pix})$
 The SIP distortions are defined by a polynomial transformation in
 pixel space, that we call $P_{A}$, for the forward transformation.
 By convention, the transform from pixel space to tangent plane then
-reads: 
+reads:
 \[
 Y_{TP}=L\left(X_{pix}-X_{ref}+P_{A}(X_{pix}-X_{ref})\right)
 \]
@@ -790,6 +790,6 @@ is applied to all of the fluxes in the catalog, which are written
 out to the same ``\emph{{*}\_flux}'' catalog fields (converting
 them to magnitudes in the process).
 
-\bibliography{lsst,lsst-dm,refs,refs_ads,books,jointcal}
+\bibliography{lsst,lsst-dm,refs,refs_ads,books,local}
 
 \end{document}
